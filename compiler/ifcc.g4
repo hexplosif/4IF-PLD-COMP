@@ -8,22 +8,40 @@ stmt : declaration
      | assignment
      ;
 
-declaration : 'int' var_decl_list ';' ;  // Liste de déclarations
+declaration : 'int' var_decl_list ';' ;
 
-var_decl_list : var_decl (',' var_decl)* ; // Séparées par des virgules
+var_decl_list : var_decl (',' var_decl)* ;
 
-var_decl : VAR ('=' expr)? ;  // Une variable avec option d'initialisation
+var_decl : VAR ('=' expr)? ;
 
-assignment : assign_expr (',' assign_expr)* ';' ; // Assignations multiples
+assignment : assign_expr (',' assign_expr)* ';' ;
 
-assign_expr : VAR '=' expr ;  // Expression d'affectation
+// Assignment (lowest precedence)
+assign_expr : VAR '=' expr ;
 
-return_stmt: 'return' expr ';' ;
+// New rule for return statement
+return_stmt : RETURN expr ';' ;
 
-expr : CONST
-     | VAR
-     | assign_expr  // Autorise l'affectation en tant qu'expression
-     ;
+// New top-level expression rule (non-assignment)
+expr : additionExpr ;
+
+// Addition/subtraction (left-associative)
+additionExpr 
+    : multiplicationExpr ( (op='+' | op='-') multiplicationExpr )* 
+    ;
+
+// Multiplication (left-associative)
+multiplicationExpr 
+    : primaryExpr ( (op='*') primaryExpr )* 
+    ;
+
+// Primary expressions
+primaryExpr 
+    : CONST
+    | VAR
+    | '(' expr ')'
+    | assign_expr  // allow assignment as an expression
+    ;
 
 RETURN : 'return' ;
 CONST : [0-9]+ ;

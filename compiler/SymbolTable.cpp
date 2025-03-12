@@ -1,7 +1,9 @@
 #include "SymbolTable.h"
 
-bool SymbolTable::addVariable(const std::string& name) {
-    if (table.find(name) != table.end()) {
+bool SymbolTable::addVariable(const std::string &name)
+{
+    if (table.find(name) != table.end())
+    {
         std::cerr << "Erreur : Variable '" << name << "' déjà déclarée." << std::endl;
         return false;
     }
@@ -10,12 +12,15 @@ bool SymbolTable::addVariable(const std::string& name) {
     return true;
 }
 
-bool SymbolTable::exists(const std::string& name) const {
+bool SymbolTable::exists(const std::string &name) const
+{
     return table.find(name) != table.end();
 }
 
-int SymbolTable::getIndex(const std::string& name) const {
-    if (!exists(name)) {
+int SymbolTable::getIndex(const std::string &name) const
+{
+    if (!exists(name))
+    {
         std::cerr << "Erreur : Variable '" << name << "' non déclarée." << std::endl;
         return -1;
     }
