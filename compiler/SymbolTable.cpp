@@ -21,10 +21,3 @@ int SymbolTable::getIndex(const std::string& name) const {
     }
     return table.at(name);
 }
-
-void SymbolTable::print() const {
-    std::cout << "Table des symboles :" << std::endl;
-    for (const auto& [name, index] : table) {
-        std::cout << "  " << name << " -> " << index << std::endl;
-    }
-}
