@@ -28,6 +28,7 @@ expr : CONST
 RETURN : 'return' ;
 CONST : [0-9]+ ;
 VAR   : [a-zA-Z_][a-zA-Z_0-9]* ;
+
 COMMENT : '/*' .*? '*/' -> skip ;
 DIRECTIVE : '#' .*? '\n' -> skip ;
 WS    : [ \t\r\n] -> channel(HIDDEN);

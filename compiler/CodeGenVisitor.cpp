@@ -10,6 +10,7 @@ antlrcpp::Any CodeGenVisitor::visitDeclaration(ifccParser::DeclarationContext *c
     for (auto varDecl : ctx->var_decl_list()->var_decl()) {
         std::string varName = varDecl->VAR()->getText();
 
+<<<<<<< HEAD
         // Allouer de l'espace sur la pile
         stackOffset -= 4;
         symbolTable[varName] = stackOffset;
@@ -24,12 +25,24 @@ antlrcpp::Any CodeGenVisitor::visitDeclaration(ifccParser::DeclarationContext *c
                 std::cout << "    movl " << symbolTable[sourceVar] << "(%rbp), %eax" << std::endl;
                 std::cout << "    movl %eax, " << stackOffset << "(%rbp)" << std::endl;
             }
+=======
+    // Vérifier si une initialisation est présente
+    if (ctx->expr()) {
+        if (ctx->expr()->CONST()) {
+            int value = std::stoi(ctx->expr()->CONST()->getText());
+            std::cout << "    movl $" << value << ", " << stackOffset << "(%rbp)" << std::endl;
+        } else if (ctx->expr()->VAR()) {
+            std::string sourceVar = ctx->expr()->VAR()->getText();
+            std::cout << "    movl " << symbolTable[sourceVar] << "(%rbp), %eax" << std::endl;
+            std::cout << "    movl %eax, " << stackOffset << "(%rbp)" << std::endl;
+>>>>>>> 51710e0c0cb45c698b4aa70986ce156239b6bc81
         }
     }
     return 0;
 }
 
 
+<<<<<<< HEAD
 
 antlrcpp::Any CodeGenVisitor::visitAssignment(ifccParser::AssignmentContext *ctx) {
     int count = ctx->assign_expr().size(); // Nombre d'affectations
@@ -48,6 +61,22 @@ antlrcpp::Any CodeGenVisitor::visitAssignment(ifccParser::AssignmentContext *ctx
             std::cout << "    movl %eax, " << symbolTable[varName] << "(%rbp)" << std::endl;
         }
     }
+=======
+antlrcpp::Any CodeGenVisitor::visitAssignment(ifccParser::AssignmentContext *ctx) {
+    std::string varName = ctx->VAR()->getText();
+    
+    if (ctx->expr()->CONST()) {
+        // Cas où l'affectation est une constante (ex: a = 3)
+        int value = std::stoi(ctx->expr()->CONST()->getText());
+        std::cout << "    movl $" << value << ", " << symbolTable[varName] << "(%rbp)" << std::endl;
+    } else if (ctx->expr()->VAR()) {
+        // Cas où l'affectation est une variable (ex: b = a)
+        std::string sourceVar = ctx->expr()->VAR()->getText();
+        std::cout << "    movl " << symbolTable[sourceVar] << "(%rbp), %eax" << std::endl;
+        std::cout << "    movl %eax, " << symbolTable[varName] << "(%rbp)" << std::endl;
+    }
+
+>>>>>>> 51710e0c0cb45c698b4aa70986ce156239b6bc81
     return 0;
 }
 
