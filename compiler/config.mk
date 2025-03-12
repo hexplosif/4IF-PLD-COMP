@@ -3,3 +3,7 @@ ANTLRJAR=/usr/share/java/stringtemplate4.jar:/usr/share/java/antlr4.jar:/usr/sha
 ANTLRINC=/usr/include/antlr4-runtime
 ANTLRLIB=/usr/lib/x86_64-linux-gnu/libantlr4-runtime.a
 ANTLR=antlr4
+
+ANTLRINC=/usr/local/include/antlr4-runtime/
+ANTLRLIB=/usr/local/lib/libantlr4-runtime.a
+ANTLR=java -jar ~/antlr4-install/antlr-4.13.2-complete.jar
