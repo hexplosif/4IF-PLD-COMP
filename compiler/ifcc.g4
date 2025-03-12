@@ -4,30 +4,29 @@ axiom : prog EOF ;
 
 prog : 'int' 'main' '(' ')' '{' stmt* return_stmt '}' ;
 
-stmt : declaration 
-     | assignment
-     ;
+stmt 
+    : decl_stmt    # DeclarationStatement
+    | assign_stmt  # AssignmentStatement
+    | expr ';'     # ExpressionStatement
+    ;
 
-declaration : 'int' var_decl_list ';' ;  // Liste de déclarations
+decl_stmt : 'int' VAR ('=' expr)? ';' ;  // Déclaration avec ou sans affectation
+assign_stmt : VAR '=' expr ';' ;         // Affectation
 
-var_decl_list : var_decl (',' var_decl)* ; // Séparées par des virgules
+return_stmt: 'return' expr ';' ;  // On retourne une expression
 
-var_decl : VAR ('=' expr)? ;  // Une variable avec option d'initialisation
+expr 
+    : expr '*' expr                                 # MulExpression
+    | expr '+' expr                                 # AddExpression
+    | expr '-' expr                                 # SubExpression
+    | expr op=('=='|'!='|'<'|'>'|'<='|'>=') expr    # ComparisonExpression
+    | '(' expr ')'                                  # ParenthesisExpression
+    | VAR                                           # VariableExpression
+    | CONST                                         # ConstantExpression
+    ;
 
-assignment : assign_expr (',' assign_expr)* ';' ; // Assignations multiples
-
-assign_expr : VAR '=' expr ;  // Expression d'affectation
-
-return_stmt: 'return' expr ';' ;
-
-expr : CONST
-     | VAR
-     | assign_expr  // Autorise l'affectation en tant qu'expression
-     ;
-
-RETURN : 'return' ;
-CONST : [0-9]+ ;
-VAR   : [a-zA-Z_][a-zA-Z_0-9]* ;
+VAR   : [a-zA-Z_][a-zA-Z_0-9]* ;  // Identifiants pour les variables
+CONST : [0-9]+ ;                 // Constantes entières
 
 COMMENT : '/*' .*? '*/' -> skip ;
 DIRECTIVE : '#' .*? '\n' -> skip ;

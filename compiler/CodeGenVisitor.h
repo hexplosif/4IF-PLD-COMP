@@ -1,26 +1,25 @@
 #pragma once
 
-#include "antlr4-runtime.h"
 #include "generated/ifccBaseVisitor.h"
+#include <iostream>
 #include <map>
 #include <string>
 
-// Déclaration de la classe CodeGenVisitor
-class CodeGenVisitor : public ifccBaseVisitor
-{
-public:
-    // Méthodes de génération du code
-    virtual antlrcpp::Any visitProg(ifccParser::ProgContext *ctx) override;
-    virtual antlrcpp::Any visitReturn_stmt(ifccParser::Return_stmtContext *ctx) override;
-    virtual antlrcpp::Any visitDeclaration(ifccParser::DeclarationContext *ctx) override;
-    virtual antlrcpp::Any visitAssign_expr(ifccParser::Assign_exprContext *ctx) override;
-    virtual antlrcpp::Any visitAssignment(ifccParser::AssignmentContext *ctx) override;
-    virtual antlrcpp::Any visitExpr(ifccParser::ExprContext *ctx) override;
-
-    // Table des symboles pour stocker les variables et leur offset
-    static std::map<std::string, int> symbolTable;
-
+class CodeGenVisitor : public ifccBaseVisitor {
 private:
-    // Offset pour les variables (géré comme un entier 32 bits)
-    static int stackOffset;
+    std::map<std::string, int> variables;
+    int totalVars = 0;
+    int currentDeclIndex = 0; // Compteur de déclaration (1ère déclaration, 2ème, etc.)
+
+public:
+    virtual antlrcpp::Any visitProg(ifccParser::ProgContext *ctx) override;
+    virtual antlrcpp::Any visitDecl_stmt(ifccParser::Decl_stmtContext *ctx) override;
+    virtual antlrcpp::Any visitAssign_stmt(ifccParser::Assign_stmtContext *ctx) override;
+    virtual antlrcpp::Any visitReturn_stmt(ifccParser::Return_stmtContext *ctx) override;
+    virtual antlrcpp::Any visitAddExpression(ifccParser::AddExpressionContext *ctx) override;
+    virtual antlrcpp::Any visitSubExpression(ifccParser::SubExpressionContext *ctx) override;
+    virtual antlrcpp::Any visitMulExpression(ifccParser::MulExpressionContext *ctx) override;
+    virtual antlrcpp::Any visitVariableExpression(ifccParser::VariableExpressionContext *ctx) override;
+    virtual antlrcpp::Any visitConstantExpression(ifccParser::ConstantExpressionContext *ctx) override;
+    virtual antlrcpp::Any visitComparisonExpression(ifccParser::ComparisonExpressionContext *ctx) override;
 };
