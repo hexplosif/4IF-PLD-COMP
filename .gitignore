@@ -1,8 +1,9 @@
+compiler/generated/
+compiler/build/
+
 compiler/config.mk
 compiler/ubuntu.mk
 compiler/ifcc
 compiler/DI.mk
 compiler/fedora.mk
 compiler/a.out
-compiler/generated/
-compiler/build/
