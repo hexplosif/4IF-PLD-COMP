@@ -5,17 +5,24 @@ axiom : prog EOF ;
 prog : 'int' 'main' '(' ')' '{' stmt* return_stmt '}' ;
 
 stmt : declaration 
-     | assignment 
+     | assignment
      ;
 
-declaration : 'int' VAR ('=' expr)? ';' ;
+declaration : 'int' var_decl_list ';' ;  // Liste de déclarations
 
-assignment : VAR '=' expr ';' ;
+var_decl_list : var_decl (',' var_decl)* ; // Séparées par des virgules
+
+var_decl : VAR ('=' expr)? ;  // Une variable avec option d'initialisation
+
+assignment : assign_expr (',' assign_expr)* ';' ; // Assignations multiples
+
+assign_expr : VAR '=' expr ;  // Expression d'affectation
 
 return_stmt: 'return' expr ';' ;
 
-expr : CONST 
+expr : CONST
      | VAR
+     | assign_expr  // Autorise l'affectation en tant qu'expression
      ;
 
 RETURN : 'return' ;
