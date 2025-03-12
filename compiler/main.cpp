@@ -52,8 +52,6 @@ int main(int argn, const char **argv)
   SymbolTableVisitor s;
   s.visit(tree);
 
-  s.symbols.print();
-
   CodeGenVisitor v;
   v.visit(tree);
 

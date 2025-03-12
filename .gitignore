@@ -11,4 +11,6 @@ compiler/*.o
 compiler/*.c
 compiler/*.s
 
-tests/ifcc-test-output/
+tests/ifcc-test-output/*
+
+.vscode/
