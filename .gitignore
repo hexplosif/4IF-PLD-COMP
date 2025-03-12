@@ -14,3 +14,4 @@ compiler/*.s
 tests/ifcc-test-output/*
 
 .vscode/
+tests/ifcc-wrapper.sh
