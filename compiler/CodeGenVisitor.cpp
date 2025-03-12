@@ -13,22 +13,36 @@ antlrcpp::Any CodeGenVisitor::visitDeclaration(ifccParser::DeclarationContext *c
     stackOffset -= 4;
     symbolTable[varName] = stackOffset;
 
-    // Si la déclaration inclut une initialisation (ex : int a = 2)
+    // Vérifier si une initialisation est présente
     if (ctx->expr()) {
-        int value = std::stoi(ctx->expr()->getText());
-        std::cout << "    movl $" << value << ", " << stackOffset << "(%rbp)" << std::endl;
+        if (ctx->expr()->CONST()) {
+            int value = std::stoi(ctx->expr()->CONST()->getText());
+            std::cout << "    movl $" << value << ", " << stackOffset << "(%rbp)" << std::endl;
+        } else if (ctx->expr()->VAR()) {
+            std::string sourceVar = ctx->expr()->VAR()->getText();
+            std::cout << "    movl " << symbolTable[sourceVar] << "(%rbp), %eax" << std::endl;
+            std::cout << "    movl %eax, " << stackOffset << "(%rbp)" << std::endl;
+        }
     }
     
     return 0;
 }
 
-// Fonction pour traiter une affectation (ex : a = 3; ou b = a;)
+
 antlrcpp::Any CodeGenVisitor::visitAssignment(ifccParser::AssignmentContext *ctx) {
     std::string varName = ctx->VAR()->getText();
-    int value = std::stoi(ctx->expr()->getText());
+    
+    if (ctx->expr()->CONST()) {
+        // Cas où l'affectation est une constante (ex: a = 3)
+        int value = std::stoi(ctx->expr()->CONST()->getText());
+        std::cout << "    movl $" << value << ", " << symbolTable[varName] << "(%rbp)" << std::endl;
+    } else if (ctx->expr()->VAR()) {
+        // Cas où l'affectation est une variable (ex: b = a)
+        std::string sourceVar = ctx->expr()->VAR()->getText();
+        std::cout << "    movl " << symbolTable[sourceVar] << "(%rbp), %eax" << std::endl;
+        std::cout << "    movl %eax, " << symbolTable[varName] << "(%rbp)" << std::endl;
+    }
 
-    // Générer le code assembleur pour affecter la valeur à la variable
-    std::cout << "    movl $" << value << ", " << symbolTable[varName] << "(%rbp)" << std::endl;
     return 0;
 }
 
