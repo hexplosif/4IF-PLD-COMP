@@ -1,0 +1,5 @@
+asm-ifcc.s: Assembler messages:
+asm-ifcc.s:1: Error: no such instruction: `table des symboles:'
+asm-ifcc.s:2: Error: no such instruction: `x ->0'
+
+exit status: 1
