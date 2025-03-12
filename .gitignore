@@ -7,3 +7,8 @@ compiler/ifcc
 compiler/DI.mk
 compiler/fedora.mk
 compiler/a.out
+compiler/*.o
+compiler/*.c
+compiler/*.s
+
+tests/ifcc-test-output/
