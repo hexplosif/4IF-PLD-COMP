@@ -1,2 +1,3 @@
+/mnt/c/Users/aschl/Documents/4IF-PLD-COMP/tests/ifcc-wrapper.sh: 21: /mnt/c/Users/aschl/Documents/4IF-PLD-COMP/tests/../compiler/ifcc: not found
 
-exit status: 0
+exit status: 127
