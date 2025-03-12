@@ -71,3 +71,9 @@ gui:
 clean:
 	rm -rf build generated
 	rm -f ifcc
+
+##########################################
+# run the gcc and ifcc compiler
+run: ifcc
+	./ifcc ret42.c > ret42_ifcc.s
+	gcc -S ret42.c -o ret42_gcc.s
