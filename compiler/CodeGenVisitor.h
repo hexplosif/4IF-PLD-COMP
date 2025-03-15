@@ -19,6 +19,9 @@ public:
     virtual antlrcpp::Any visitAddExpression(ifccParser::AddExpressionContext *ctx) override;
     virtual antlrcpp::Any visitSubExpression(ifccParser::SubExpressionContext *ctx) override;
     virtual antlrcpp::Any visitMulExpression(ifccParser::MulExpressionContext *ctx) override;
+    virtual antlrcpp::Any visitBitwiseAndExpression(ifccParser::BitwiseAndExpressionContext *ctx) override;
+    virtual antlrcpp::Any visitBitwiseOrExpression(ifccParser::BitwiseOrExpressionContext *ctx) override;
+    virtual antlrcpp::Any visitBitwiseXorExpression(ifccParser::BitwiseXorExpressionContext *ctx) override;
     virtual antlrcpp::Any visitVariableExpression(ifccParser::VariableExpressionContext *ctx) override;
     virtual antlrcpp::Any visitConstantExpression(ifccParser::ConstantExpressionContext *ctx) override;
     virtual antlrcpp::Any visitComparisonExpression(ifccParser::ComparisonExpressionContext *ctx) override;

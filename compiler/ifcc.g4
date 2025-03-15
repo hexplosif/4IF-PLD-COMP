@@ -16,7 +16,10 @@ assign_stmt : VAR '=' expr ';' ;         // Affectation
 return_stmt: 'return' expr ';' ;  // On retourne une expression
 
 expr 
-    : expr '*' expr                                 # MulExpression
+    : expr '&' expr                                 # BitwiseAndExpression
+    | expr '^' expr                                 # BitwiseXorExpression
+    | expr '|' expr                                 # BitwiseOrExpression
+    | expr '*' expr                                 # MulExpression
     | expr '+' expr                                 # AddExpression
     | expr '-' expr                                 # SubExpression
     | expr op=('=='|'!='|'<'|'>'|'<='|'>=') expr    # ComparisonExpression

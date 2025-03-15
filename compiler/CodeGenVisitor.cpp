@@ -86,6 +86,30 @@ antlrcpp::Any CodeGenVisitor::visitAddExpression(ifccParser::AddExpressionContex
     return 0;
 }
 
+antlrcpp::Any CodeGenVisitor::visitBitwiseAndExpression(ifccParser::BitwiseAndExpressionContext *ctx) {
+    visit(ctx->expr(0));  
+    std::cout << "    movl %eax, %ebx\n"; // Sauvegarder le résultat
+    visit(ctx->expr(1));  // Évaluer l'opérande droit
+    std::cout << "    andl %ebx, %eax\n";// Faire le AND
+    return 0;
+}
+
+antlrcpp::Any CodeGenVisitor::visitBitwiseOrExpression(ifccParser::BitwiseOrExpressionContext *ctx) {
+    visit(ctx->expr(0));
+    std::cout << "    movl %eax, %ebx\n";
+    visit(ctx->expr(1));
+    std::cout << "    orl %ebx, %eax\n";
+    return 0;
+}
+
+antlrcpp::Any CodeGenVisitor::visitBitwiseXorExpression(ifccParser::BitwiseXorExpressionContext *ctx) {
+    visit(ctx->expr(0));
+    std::cout << "    movl %eax, %ebx\n";
+    visit(ctx->expr(1));
+    std::cout << "    xorl %ebx, %eax\n";
+    return 0;
+}
+
 antlrcpp::Any CodeGenVisitor::visitSubExpression(ifccParser::SubExpressionContext *ctx)
 {
     // Évaluer a (l'opérande gauche)
