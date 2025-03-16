@@ -88,25 +88,28 @@ antlrcpp::Any CodeGenVisitor::visitAddExpression(ifccParser::AddExpressionContex
 
 antlrcpp::Any CodeGenVisitor::visitBitwiseAndExpression(ifccParser::BitwiseAndExpressionContext *ctx) {
     visit(ctx->expr(0));  
-    std::cout << "    movl %eax, %ebx\n"; // Sauvegarder le résultat
-    visit(ctx->expr(1));  // Évaluer l'opérande droit
-    std::cout << "    andl %ebx, %eax\n";// Faire le AND
+    std::cout << "    pushq %rax\n";  // Sauvegarder le résultat
+    visit(ctx->expr(1));  
+    std::cout << "    popq %rcx\n";   // Récupérer le premier opérande dans %rcx
+    std::cout << "    andl %ecx, %eax\n"; // Faire le AND
     return 0;
-}
+    }
 
 antlrcpp::Any CodeGenVisitor::visitBitwiseOrExpression(ifccParser::BitwiseOrExpressionContext *ctx) {
-    visit(ctx->expr(0));
-    std::cout << "    movl %eax, %ebx\n";
-    visit(ctx->expr(1));
-    std::cout << "    orl %ebx, %eax\n";
+    visit(ctx->expr(0));  
+    std::cout << "    pushq %rax\n";  // Sauvegarder le résultat
+    visit(ctx->expr(1));  
+    std::cout << "    popq %rcx\n";   // Récupérer le premier opérande dans %rcx
+    std::cout << "    orl %ecx, %eax\n"; // Faire le OR
     return 0;
 }
 
 antlrcpp::Any CodeGenVisitor::visitBitwiseXorExpression(ifccParser::BitwiseXorExpressionContext *ctx) {
-    visit(ctx->expr(0));
-    std::cout << "    movl %eax, %ebx\n";
-    visit(ctx->expr(1));
-    std::cout << "    xorl %ebx, %eax\n";
+    visit(ctx->expr(0));  
+    std::cout << "    pushq %rax\n";  // Sauvegarder le résultat
+    visit(ctx->expr(1));  
+    std::cout << "    popq %rcx\n";   // Récupérer le premier opérande dans %rcx
+    std::cout << "    xorl %ecx, %eax\n"; // Faire le XOR
     return 0;
 }
 
