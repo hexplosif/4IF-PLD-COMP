@@ -89,8 +89,49 @@ antlrcpp::Any CodeGenVisitor::visitReturn_stmt(ifccParser::Return_stmtContext *c
     return 0;
 }
 
-// Gestion des expressions addition/soustraction
-antlrcpp::Any CodeGenVisitor::visitAddSubExpression(ifccParser::AddSubExpressionContext *ctx) {
+antlrcpp::Any CodeGenVisitor::visitBitwiseAndExpression(ifccParser::BitwiseAndExpressionContext *ctx) {
+    visit(ctx->expr(0));  
+    std::cout << "    pushq %rax\n";  // Sauvegarder le résultat
+    visit(ctx->expr(1));  
+    std::cout << "    popq %rcx\n";   // Récupérer le premier opérande dans %rcx
+    std::cout << "    andl %ecx, %eax\n"; // Faire le AND
+    return 0;
+    }
+
+antlrcpp::Any CodeGenVisitor::visitBitwiseOrExpression(ifccParser::BitwiseOrExpressionContext *ctx) {
+    visit(ctx->expr(0));  
+    std::cout << "    pushq %rax\n";  // Sauvegarder le résultat
+    visit(ctx->expr(1));  
+    std::cout << "    popq %rcx\n";   // Récupérer le premier opérande dans %rcx
+    std::cout << "    orl %ecx, %eax\n"; // Faire le OR
+    return 0;
+}
+
+antlrcpp::Any CodeGenVisitor::visitBitwiseXorExpression(ifccParser::BitwiseXorExpressionContext *ctx) {
+    visit(ctx->expr(0));  
+    std::cout << "    pushq %rax\n";  // Sauvegarder le résultat
+    visit(ctx->expr(1));  
+    std::cout << "    popq %rcx\n";   // Récupérer le premier opérande dans %rcx
+    std::cout << "    xorl %ecx, %eax\n"; // Faire le XOR
+    return 0;
+}
+
+
+antlrcpp::Any CodeGenVisitor::visitUnaryLogicalNotExpression(ifccParser::UnaryLogicalNotExpressionContext *ctx) {
+    visit(ctx->expr()); // Évaluer l'expression
+    std::string op = ctx->op->getText();
+    if (op == "-") {
+        std::cout << "    negl %eax\n"; // Négation arithmétique
+    } else if (op == "!") {
+        std::cout << "    cmpl $0, %eax\n"; // Comparer avec 0
+        std::cout << "    sete %al\n"; // Mettre %al à 1 si %eax est 0
+        std::cout << "    movzbl %al, %eax\n"; 
+    }
+    return 0;
+}
+
+antlrcpp::Any CodeGenVisitor::visitAddSubExpression(ifccParser::AddSubExpressionContext *ctx)
+{
     if (ctx->op->getText() == "+") {
         visit(ctx->expr(0)); // Évalue le premier opérande
         std::cout << "    pushq %rax\n";  // Sauvegarde du résultat
