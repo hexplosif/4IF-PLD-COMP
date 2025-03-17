@@ -99,12 +99,12 @@ if args.debug:
 
 # cleanup stale output directory
 if os.path.isdir(f'{pld_base_dir}/ifcc-test-output'):
-    run_command(f'rm -rf {pld_base_dir}/ifcc-test-output')
+    run_command(f'rm -rf "{pld_base_dir}/ifcc-test-output"')
 
 # Ensure that the `ifcc` executable itself is up-to-date
-makestatus=run_command(f'cd {pld_base_dir}/compiler; make --question ifcc')
+makestatus=run_command(f'cd "{pld_base_dir}"/compiler; make --question ifcc')
 if makestatus: # updates are needed
-    makestatus=run_command(f'cd {pld_base_dir}/compiler; make ifcc',toscreen=True) # this time we run `make` for real
+    makestatus=run_command(f'cd "{pld_base_dir}/compiler"; make ifcc',toscreen=True) # this time we run `make` for real
     if makestatus: # if `make` failed, we fail too
         if os.path.exists("ifcc"): # and we remove any out-of-date compiler (to reduce chance of confusion)
             os.unlink("ifcc")
@@ -140,9 +140,9 @@ if args.S or args.c or args.output:
         if args.output[-2:] != ".s":
             print("error: output file name must end with '.s'")
             exit(1)
-        ifccstatus=run_command(f'{pld_base_dir}/compiler/ifcc {inputfilename} > {args.output}')
+        ifccstatus=run_command(f'"{pld_base_dir}/compiler/ifcc" {inputfilename} > {args.output}')
         if ifccstatus: # let's show error messages on screen
-            exit(run_command(f'{pld_base_dir}/compiler/ifcc {inputfilename}',toscreen=True))
+            exit(run_command(f'"{pld_base_dir}/compiler/ifcc" {inputfilename}',toscreen=True))
         else:
             exit(0)
 
@@ -151,9 +151,9 @@ if args.S or args.c or args.output:
             print("error: output file name must end with '.o'")
             exit(1)
         asmname=args.output[:-2]+".s"
-        ifccstatus=run_command(f'{pld_base_dir}/compiler/ifcc {inputfilename} > {asmname}')
+        ifccstatus=run_command(f'"{pld_base_dir}/compiler/ifcc" {inputfilename} > {asmname}')
         if ifccstatus: # let's show error messages on screen
-            exit(run_command(f'{pld_base_dir}/compiler/ifcc {inputfilename}',toscreen=True))
+            exit(run_command(f'"{pld_base_dir}/compiler/ifcc" {inputfilename}',toscreen=True))
         exit(run_command(f'gcc -c -o {args.output} {asmname}',toscreen=True))
         
     else: # produce an executable
@@ -161,9 +161,9 @@ if args.S or args.c or args.output:
             print("error: incorrect name for an executable: "+args.output)
             exit(1)
         asmname=args.output+".s"
-        ifccstatus=run_command(f'{pld_base_dir}/compiler/ifcc {inputfilename} > {asmname}')
+        ifccstatus=run_command(f'"{pld_base_dir}/compiler/ifcc" {inputfilename} > {asmname}')
         if ifccstatus:
-            exit(run_command(f'{pld_base_dir}/compiler/ifcc {inputfilename}', toscreen=True))
+            exit(run_command(f'"{pld_base_dir}/compiler/ifcc" {inputfilename}', toscreen=True))
         exit(run_command(f'gcc -o {args.output} {asmname}'))
 
     # we should never end up here
@@ -281,7 +281,7 @@ for jobname in jobs:
             dumpfile("gcc-execute.txt")
             
     ## IFCC compiler
-    ifccstatus=run_command(f'{pld_base_dir}/compiler/ifcc input.c > asm-ifcc.s', 'ifcc-compile.txt')
+    ifccstatus=run_command(f'"{pld_base_dir}/compiler/ifcc" input.c > asm-ifcc.s', 'ifcc-compile.txt')
     
     if gccstatus != 0 and ifccstatus != 0:
         ## ifcc correctly rejects invalid program -> test-case ok
