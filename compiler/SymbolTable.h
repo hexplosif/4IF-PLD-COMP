@@ -9,10 +9,17 @@ enum VarType {
     CHAR
 };
 
+enum ScopeType {
+    GLOBAL,
+    FUNCTION_PARAMS,
+    BLOCK
+};
+
 struct Parameters
 {
     VarType type;
     int offset;
+    ScopeType scopeType;
 };
 
 class SymbolTable
@@ -23,7 +30,10 @@ class SymbolTable
 {
     public:
         SymbolTable( int initialOffset );
-        int addVariable(std::string name, std::string type); //return offset
+        int addLocalVariable(std::string name, std::string type); //return offset
+        void addGlobalVariable(std::string name, std::string type);
+
+
         Parameters* findVariable(std::string name); // find all var can see in the scope
         Parameters* findVariableThisScope(std::string name); //find only var in the scope
 

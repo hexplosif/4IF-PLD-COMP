@@ -6,11 +6,16 @@ SymbolTable::SymbolTable( int initialOffset ) {
     this->currentDeclOffset = initialOffset;
 }
 
-int SymbolTable::addVariable(std::string name, std::string type) {
-    Parameters p = { getType(type) , currentDeclOffset};
+int SymbolTable::addLocalVariable(std::string name, std::string type) {
+    Parameters p = { getType(type) , currentDeclOffset, ScopeType::BLOCK };
     table[name] = p;
     currentDeclOffset += 4;
     return currentDeclOffset - 4;
+}
+
+void SymbolTable::addGlobalVariable(std::string name, std::string type) {
+    Parameters p = { getType(type) , currentDeclOffset, ScopeType::GLOBAL };
+    table[name] = p;
 }
 
 Parameters* SymbolTable::findVariable(std::string name) {

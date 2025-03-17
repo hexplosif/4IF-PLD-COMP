@@ -15,6 +15,8 @@ private:
 
     // Fonction récursive pour compter les déclarations dans l'arbre
     int countDeclarations(antlr4::tree::ParseTree *tree);
+    bool isExprIsConstant(ifccParser::ExprContext *ctx);
+    int getConstantValueFromExpr(ifccParser::ExprContext *ctx);
 
 public:
     virtual antlrcpp::Any visitProg(ifccParser::ProgContext *ctx) override;
