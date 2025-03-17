@@ -11,10 +11,9 @@ compiler/*.o
 compiler/*.c
 compiler/*.s
 
-tests/ifcc-test-output/*
+ifcc-test-output/*
 
 .vscode/
 .antlr/
-tests/ifcc-wrapper.sh
 
 son_note.md

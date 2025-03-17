@@ -1,0 +1,4 @@
+line 3:4 missing ';' at 'return'
+error: syntax error during parsing
+
+exit status: 1
