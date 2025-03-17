@@ -14,13 +14,13 @@ stmt
     | block                  # BlockStatement
     ;
 
-decl_stmt : 'int' VAR ('=' expr)? ';' ;  // Déclaration avec ou sans affectation
+decl_stmt : type VAR ('=' expr)? ';' ;  // Déclaration avec ou sans affectation
 assign_stmt : VAR '=' expr ';' ;         // Affectation
 return_stmt : 'return' expr ';' ;         // On retourne une expression
 
-expr 
+expr
     : op=('-'|'!') expr                             # UnaryLogicalNotExpression
-    | expr '*' expr                                 # MulExpression
+    | expr OPM expr                                 # MulDivExpression
     | expr op=('+'|'-') expr                        # AddSubExpression
     | expr op=('=='|'!='|'<'|'>'|'<='|'>=') expr     # ComparisonExpression
     | expr '&' expr                                 # BitwiseAndExpression
@@ -29,11 +29,20 @@ expr
     | '(' expr ')'                                  # ParenthesisExpression
     | VAR                                           # VariableExpression
     | CONST                                         # ConstantExpression
+    | CONST_CHAR                                    # ConstantCharExpression
     ;
+
+type : 'int' | 'char' ;
 
 VAR   : [a-zA-Z_][a-zA-Z_0-9]* ;  // Identifiants pour les variables
 CONST : [0-9]+ ;                 // Constantes entières
+<<<<<<< HEAD
+CONST_CHAR : '\''[ -~]'\'' ;
+=======
 
+OPM: '*' | '/' | '%' ; // Opérateurs multiplicatifs 
+
+>>>>>>> main
 COMMENT : '/*' .*? '*/' -> skip ;
 DIRECTIVE : '#' .*? '\n' -> skip ;
 WS    : [ \t\r\n] -> channel(HIDDEN);

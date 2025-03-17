@@ -10,10 +10,10 @@ compiler/a.out
 compiler/*.o
 compiler/*.c
 compiler/*.s
-compiler/ret42_gcc.s
-compiler/ret42_ifcc.s
 
-tests/ifcc-test-output/*
+ifcc-test-output/*
 
 .vscode/
-tests/ifcc-wrapper.sh
+.antlr/
+
+son_note.md

@@ -1,10 +1,21 @@
 #include "CodeGenVisitor.h"
 
+<<<<<<< HEAD
+// Pour rappel : pour N variables, la 1ère déclarée aura offset = -4 * N, la 2ème = -4 * (N-1), ..., la dernière = -4.
+antlrcpp::Any CodeGenVisitor::visitProg(ifccParser::ProgContext *ctx) {
+    // Première passe : compter le nombre de variables déclarées
+    totalVars = 0;
+    for (auto stmt : ctx->stmt()) {
+        if (dynamic_cast<ifccParser::DeclarationStatementContext *>(stmt) != nullptr) {
+            totalVars++;
+        }
+=======
 // Fonction récursive pour compter les déclarations dans l'arbre
 int CodeGenVisitor::countDeclarations(antlr4::tree::ParseTree *tree) {
     int count = 0;
     if (dynamic_cast<ifccParser::Decl_stmtContext*>(tree) != nullptr) {
         count++;
+>>>>>>> main
     }
     // Utiliser la propriété children pour itérer sur les sous-arbres
     for (auto child : tree->children) {
@@ -56,13 +67,23 @@ antlrcpp::Any CodeGenVisitor::visitBlock(ifccParser::BlockContext *ctx) {
     return 0;
 }
 
+
+// ==============================================================
+//                          Statements
+// ==============================================================
+
 // Gestion de la déclaration d'une variable
 antlrcpp::Any CodeGenVisitor::visitDecl_stmt(ifccParser::Decl_stmtContext *ctx) {
+    std::string varType = ctx->type()->getText();
     std::string varName = ctx->VAR()->getText();
     currentDeclIndex++;
     // Calcul de l'offset : première déclaration -> -4*totalVars, dernière -> -4
     int offset = -4 * (totalVars - currentDeclIndex + 1);
-    variables[varName] = offset;
+<<<<<<< HEAD
+    variables[varName] = Parameters{varType, offset};
+=======
+    variables[varName] = -offset;
+>>>>>>> main
 
     if (ctx->expr()) {
         visit(ctx->expr());
@@ -79,7 +100,7 @@ antlrcpp::Any CodeGenVisitor::visitAssign_stmt(ifccParser::Assign_stmtContext *c
         exit(1);
     }
     visit(ctx->expr());
-    std::cout << "    movl %eax, " << variables[varName] << "(%rbp)" << "\n";
+    std::cout << "    movl %eax, " << variables[varName].offset << "(%rbp)" << "\n";
     return 0;
 }
 
@@ -89,6 +110,10 @@ antlrcpp::Any CodeGenVisitor::visitReturn_stmt(ifccParser::Return_stmtContext *c
     std::cout << "    jmp .Lepilogue\n"; // Aller à l'épilogue
     return 0;
 }
+
+// ==============================================================
+//                          Expressions
+// ==============================================================
 
 antlrcpp::Any CodeGenVisitor::visitUnaryLogicalNotExpression(ifccParser::UnaryLogicalNotExpressionContext *ctx) {
     visit(ctx->expr()); // Évaluer l'expression
@@ -123,12 +148,33 @@ antlrcpp::Any CodeGenVisitor::visitAddSubExpression(ifccParser::AddSubExpression
 }
 
 // Gestion des expressions multiplication
-antlrcpp::Any CodeGenVisitor::visitMulExpression(ifccParser::MulExpressionContext *ctx) {
-    visit(ctx->expr(0));
-    std::cout << "    pushq %rax\n";
-    visit(ctx->expr(1));
-    std::cout << "    popq %rcx\n";
-    std::cout << "    imull %ecx, %eax\n";
+antlrcpp::Any CodeGenVisitor::visitMulDivExpression(ifccParser::MulDivExpressionContext *ctx) {
+    std::string op = ctx->OPM()->getText();
+
+    // Evaluer a (opérande gauche)
+    visit(ctx->expr(0)); // a dans %eax
+    std::cout << "    pushq %rax\n"; // Empiler a
+
+    // Evaluer b (opérande droite)
+    visit(ctx->expr(1)); // b dans %eax
+
+    if (op == "*") {
+        // Dépiler a dans %rcx
+        std::cout << "    popq %rcx\n";
+        std::cout << "    imull %ecx, %eax\n";
+    } else if (op == "/" || op == "%") {
+        std::cout << "    pushq %rax\n"; // Empiler b
+        std::cout << "    popq %rcx\n";  // Dépiler b dans %rcx
+        std::cout << "    popq %rax\n";  // Dépiler a dans %rax
+
+        std::cout << "    cltd\n"; // sign extend %eax to %edx:%eax
+        std::cout << "    idivl %ecx\n"; // %eax = a /b , %edx = a % b
+
+        if (op == "%") {
+            std::cout << "    movl %edx, %eax\n"; // %eax = a % b
+        }
+    }
+    
     return 0;
 }
 
@@ -169,7 +215,11 @@ antlrcpp::Any CodeGenVisitor::visitVariableExpression(ifccParser::VariableExpres
         std::cerr << "error: variable " << varName << " not declared\n";
         exit(1);
     }
-    std::cout << "    movl " << variables[varName] << "(%rbp), %eax" << "\n";
+<<<<<<< HEAD
+    std::cout << "    movl " << variables[varName].offset << "(%rbp), %eax" << "\n";
+=======
+    std::cout << "    movl " << -variables[varName] << "(%rbp), %eax" << "\n";
+>>>>>>> main
     return 0;
 }
 
@@ -180,7 +230,18 @@ antlrcpp::Any CodeGenVisitor::visitConstantExpression(ifccParser::ConstantExpres
     return 0;
 }
 
+<<<<<<< HEAD
+antlrcpp::Any CodeGenVisitor::visitConstantCharExpression(ifccParser::ConstantCharExpressionContext *ctx) {
+    std::string value = ctx->CONST_CHAR()->getText().substr(1, 1);
+	int convertValue = value[0];
+    std::cout << "    movl $" << convertValue << ", %eax" << "\n";
+    return 0;
+}
+
+
+=======
 // Gestion des expressions de comparaison
+>>>>>>> main
 antlrcpp::Any CodeGenVisitor::visitComparisonExpression(ifccParser::ComparisonExpressionContext *ctx) {
     visit(ctx->expr(0)); // Évalue l'opérande gauche
     std::cout << "    pushq %rax\n";
