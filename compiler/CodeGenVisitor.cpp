@@ -18,9 +18,15 @@ int CodeGenVisitor::countDeclarations(antlr4::tree::ParseTree *tree)
 // La fonction visitProg gère le prologue, la réservation de la pile et l'appel au bloc principal.
 antlrcpp::Any CodeGenVisitor::visitProg(ifccParser::ProgContext *ctx)
 {
-    // Compter toutes les déclarations dans tout le programme (même dans les blocs imbriqués)
-    totalVars = countDeclarations(ctx->block());
-    currentDeclIndex = 0;
+    // Compter toutes les déclarations dans tout le programme (même dans les blocs imbriqués).
+    // Attention, les offsets ne sont pas global, mais pour chaque functions.
+    // Ca veut dire chaque fonction a son propre offset pour les variables.
+    // Donc il faut recalculer les offsets pour chaque fonction, pas dans le visitProg.
+
+    //int totalVars = countDeclarations(ctx->block());
+    //currentDeclIndex = 0;
+
+    currentScope = new SymbolTable(0); //global scope
 
     // Prologue
 #ifdef __APPLE__
@@ -32,12 +38,6 @@ antlrcpp::Any CodeGenVisitor::visitProg(ifccParser::ProgContext *ctx)
 #endif
     std::cout << "    pushq %rbp\n";
     std::cout << "    movq %rsp, %rbp\n";
-
-    // Allouer l'espace pour les variables (4 octets par variable, aligné à 16 octets)
-    int stackSize = totalVars * 4;
-    stackSize = (stackSize + 15) & ~15;
-    if (stackSize > 0)
-        std::cout << "    subq $" << stackSize << ", %rsp\n";
 
     // Visiter le bloc principal
     visit(ctx->block());
@@ -54,10 +54,29 @@ antlrcpp::Any CodeGenVisitor::visitProg(ifccParser::ProgContext *ctx)
 // Parcourt un bloc délimité par '{' et '}'
 antlrcpp::Any CodeGenVisitor::visitBlock(ifccParser::BlockContext *ctx)
 {
+    // Creer un nouveau scope quand on entre un nouveau block
+    int offset;
+    if ( currentScope->isGlobalScope() ) {      // si ce bloc est une fonction, comme GlobalScope -> FunctionScope -> BlockScope
+        // On calculate tous les variables dans la fonction et chercher le premier offset
+        int totalVars = countDeclarations(ctx); 
+        offset = -totalVars * 4;
+    } else {                                    // sinon, c'est un blockscope
+        // On laisse ce scope continue le offset de son parent
+        offset = currentScope->getCurrentDeclOffset();
+    }
+
+    SymbolTable* parentScope = currentScope;
+    currentScope = new SymbolTable(offset);
+    currentScope->setParent(parentScope);
+
     for (auto stmt : ctx->stmt())
     {
         visit(stmt);
     }
+
+    // le block est finis, on revient vers scope de parent
+    currentScope = currentScope->getParent();
+
     return 0;
 }
 
@@ -70,10 +89,7 @@ antlrcpp::Any CodeGenVisitor::visitDecl_stmt(ifccParser::Decl_stmtContext *ctx)
 {
     std::string varType = ctx->type()->getText();
     std::string varName = ctx->VAR()->getText();
-    currentDeclIndex++;
-    // Calcul de l'offset : première déclaration -> -4*totalVars, dernière -> -4
-    int offset = -4 * (totalVars - currentDeclIndex + 1);
-    variables[varName] = Parameters{varType, offset};
+    int offset = currentScope->addVariable(varName, varType);
 
     if (ctx->expr())
     {
@@ -87,13 +103,14 @@ antlrcpp::Any CodeGenVisitor::visitDecl_stmt(ifccParser::Decl_stmtContext *ctx)
 antlrcpp::Any CodeGenVisitor::visitAssign_stmt(ifccParser::Assign_stmtContext *ctx)
 {
     std::string varName = ctx->VAR()->getText();
-    if (variables.find(varName) == variables.end())
-    {
+    Parameters *var = currentScope->findVariable(varName);
+    if (var == nullptr) {
         std::cerr << "error: variable " << varName << " not declared\n";
         exit(1);
     }
+
     visit(ctx->expr());
-    std::cout << "    movl %eax, " << variables[varName].offset << "(%rbp)" << "\n";
+    std::cout << "    movl %eax, " << var->offset << "(%rbp)" << "\n";
     return 0;
 }
 
@@ -221,12 +238,13 @@ antlrcpp::Any CodeGenVisitor::visitBitwiseXorExpression(ifccParser::BitwiseXorEx
 antlrcpp::Any CodeGenVisitor::visitVariableExpression(ifccParser::VariableExpressionContext *ctx)
 {
     std::string varName = ctx->VAR()->getText();
-    if (variables.find(varName) == variables.end())
+    Parameters *var = currentScope->findVariable(varName);
+    if (var == nullptr)
     {
         std::cerr << "error: variable " << varName << " not declared\n";
         exit(1);
     }
-    std::cout << "    movl " << variables[varName].offset << "(%rbp), %eax" << "\n";
+    std::cout << "    movl " << var->offset << "(%rbp), %eax" << "\n";
 
     return 0;
 }

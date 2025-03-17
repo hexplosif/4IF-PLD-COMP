@@ -1,21 +1,17 @@
 #pragma once
 
-#include "generated/ifccBaseVisitor.h"
 #include <iostream>
 #include <map>
 #include <string>
 
-struct Parameters
-{
-    std::string type = "";
-    int offset = -1;
-};
+#include "generated/ifccBaseVisitor.h"
+#include "SymbolTable.h"
+
+
 class CodeGenVisitor : public ifccBaseVisitor
 {
 private:
-    std::map<std::string, Parameters> variables;
-    int totalVars = 0;
-    int currentDeclIndex = 0; // Compteur pour le calcul des offsets
+    SymbolTable* currentScope = nullptr; //see SymbolTable.h
 
     // Fonction récursive pour compter les déclarations dans l'arbre
     int countDeclarations(antlr4::tree::ParseTree *tree);
