@@ -37,13 +37,10 @@ type : 'int' | 'char' ;
 
 VAR   : [a-zA-Z_][a-zA-Z_0-9]* ;  // Identifiants pour les variables
 CONST : [0-9]+ ;                 // Constantes entières
-<<<<<<< HEAD
 CONST_CHAR : '\''[ -~]'\'' ;
-=======
 
 OPM: '*' | '/' | '%' ; // Opérateurs multiplicatifs 
 
->>>>>>> main
 COMMENT : '/*' .*? '*/' -> skip ;
 DIRECTIVE : '#' .*? '\n' -> skip ;
 WS    : [ \t\r\n] -> channel(HIDDEN);

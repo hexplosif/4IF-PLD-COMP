@@ -13,12 +13,7 @@ struct Parameters
 class CodeGenVisitor : public ifccBaseVisitor
 {
 private:
-<<<<<<< HEAD
     std::map<std::string, Parameters> variables;
-    == == == =
-                 // On utilise une table globale pour simplifier, mais sans gestion de scopes
-        std::map<std::string, int> variables;
->>>>>>> main
     int totalVars = 0;
     int currentDeclIndex = 0; // Compteur pour le calcul des offsets
 
