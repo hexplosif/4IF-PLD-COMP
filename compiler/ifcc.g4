@@ -2,23 +2,27 @@ grammar ifcc;
 
 axiom : prog EOF ;
 
-prog : 'int' 'main' '(' ')' '{' stmt* return_stmt '}' ;
+prog : 'int' 'main' '(' ')' block ;
+
+block : '{' stmt* '}' ;
 
 stmt 
-    : decl_stmt    # DeclarationStatement
-    | assign_stmt  # AssignmentStatement
-    | expr ';'     # ExpressionStatement
+    : decl_stmt              # DeclarationStatement
+    | assign_stmt            # AssignmentStatement
+    | expr ';'               # ExpressionStatement
+    | return_stmt            # ReturnStatement
+    | block                  # BlockStatement
     ;
 
 decl_stmt : 'int' VAR ('=' expr)? ';' ;  // Déclaration avec ou sans affectation
 assign_stmt : VAR '=' expr ';' ;         // Affectation
-
-return_stmt: 'return' expr ';' ;  // On retourne une expression
+return_stmt : 'return' expr ';' ;         // On retourne une expression
 
 expr 
-    : expr '*' expr                                 # MulExpression
+    : op=('-'|'!') expr                             # UnaryLogicalNotExpression
+    | expr '*' expr                                 # MulExpression
     | expr op=('+'|'-') expr                        # AddSubExpression
-    | expr op=('=='|'!='|'<'|'>'|'<='|'>=') expr    # ComparisonExpression
+    | expr op=('=='|'!='|'<'|'>'|'<='|'>=') expr     # ComparisonExpression
     | expr '&' expr                                 # BitwiseAndExpression
     | expr '^' expr                                 # BitwiseXorExpression
     | expr '|' expr                                 # BitwiseOrExpression
