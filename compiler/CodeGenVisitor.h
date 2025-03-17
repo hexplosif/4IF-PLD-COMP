@@ -5,11 +5,20 @@
 #include <map>
 #include <string>
 
+struct Parameters
+{
+    std::string type = "";
+    int offset = -1;
+};
 class CodeGenVisitor : public ifccBaseVisitor
 {
 private:
-    // On utilise une table globale pour simplifier, mais sans gestion de scopes
-    std::map<std::string, int> variables;
+<<<<<<< HEAD
+    std::map<std::string, Parameters> variables;
+    == == == =
+                 // On utilise une table globale pour simplifier, mais sans gestion de scopes
+        std::map<std::string, int> variables;
+>>>>>>> main
     int totalVars = 0;
     int currentDeclIndex = 0; // Compteur pour le calcul des offsets
 
@@ -36,6 +45,7 @@ public:
     virtual antlrcpp::Any visitMulDivExpression(ifccParser::MulDivExpressionContext *ctx) override;
     virtual antlrcpp::Any visitVariableExpression(ifccParser::VariableExpressionContext *ctx) override;
     virtual antlrcpp::Any visitConstantExpression(ifccParser::ConstantExpressionContext *ctx) override;
+    virtual antlrcpp::Any visitConstantCharExpression(ifccParser::ConstantCharExpressionContext *ctx) override;
     virtual antlrcpp::Any visitComparisonExpression(ifccParser::ComparisonExpressionContext *ctx) override;
     virtual antlrcpp::Any visitBitwiseAndExpression(ifccParser::BitwiseAndExpressionContext *ctx) override;
     virtual antlrcpp::Any visitBitwiseOrExpression(ifccParser::BitwiseOrExpressionContext *ctx) override;
