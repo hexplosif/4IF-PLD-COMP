@@ -17,8 +17,7 @@ return_stmt: 'return' expr ';' ;  // On retourne une expression
 
 expr 
     : expr '*' expr                                 # MulExpression
-    | expr '+' expr                                 # AddExpression
-    | expr '-' expr                                 # SubExpression
+    | expr op=('+'|'-') expr                        # AddSubExpression
     | expr op=('=='|'!='|'<'|'>'|'<='|'>=') expr    # ComparisonExpression
     | expr '&' expr                                 # BitwiseAndExpression
     | expr '^' expr                                 # BitwiseXorExpression

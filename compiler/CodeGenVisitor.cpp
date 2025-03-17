@@ -76,16 +76,6 @@ antlrcpp::Any CodeGenVisitor::visitReturn_stmt(ifccParser::Return_stmtContext *c
     return 0;
 }
 
-antlrcpp::Any CodeGenVisitor::visitAddExpression(ifccParser::AddExpressionContext *ctx) {
-    // a + b : évaluer a puis b
-    visit(ctx->expr(0)); // évalue a, résultat dans %eax
-    std::cout << "    pushq %rax\n";  // sauvegarde a
-    visit(ctx->expr(1)); // évalue b, résultat dans %eax
-    std::cout << "    popq %rcx\n";   // récupère a dans %rcx
-    std::cout << "    addl %ecx, %eax\n"; // %eax = a + b
-    return 0;
-}
-
 antlrcpp::Any CodeGenVisitor::visitBitwiseAndExpression(ifccParser::BitwiseAndExpressionContext *ctx) {
     visit(ctx->expr(0));  
     std::cout << "    pushq %rax\n";  // Sauvegarder le résultat
@@ -113,22 +103,26 @@ antlrcpp::Any CodeGenVisitor::visitBitwiseXorExpression(ifccParser::BitwiseXorEx
     return 0;
 }
 
-antlrcpp::Any CodeGenVisitor::visitSubExpression(ifccParser::SubExpressionContext *ctx)
+antlrcpp::Any CodeGenVisitor::visitAddSubExpression(ifccParser::AddSubExpressionContext *ctx)
 {
-    // Évaluer a (l'opérande gauche)
-    visit(ctx->expr(0));         // a dans %eax
-    std::cout << "    pushq %rax\n";  // Empiler a
-
-    // Évaluer b (l'opérande droite)
-    visit(ctx->expr(1));         // b dans %eax
-
-    // Dépiler a dans %rcx
-    std::cout << "    popq %rcx\n";   
-
-    // Calculer a - b
-    std::cout << "    subl %eax, %ecx\n"; // %ecx = a - b
-    std::cout << "    movl %ecx, %eax\n";  // mettre le résultat dans %eax
-
+    if (ctx->op->getText() == "+") {
+        
+        // a + b : évaluer a puis b
+        visit(ctx->expr(0)); // évalue a, résultat dans %eax
+        std::cout << "    pushq %rax\n";  // sauvegarde a
+        visit(ctx->expr(1)); // évalue b, résultat dans %eax
+        std::cout << "    popq %rcx\n";   // récupère a dans %rcx
+        std::cout << "    addl %ecx, %eax\n"; // %eax = a + b
+    }
+    else if (ctx->op->getText() == "-") {
+        // a - b : évaluer a puis b
+        visit(ctx->expr(0));         // évalue a, résultat dans %eax
+        std::cout << "    pushq %rax\n";  // sauvegarde a
+        visit(ctx->expr(1));         // évalue b, résultat dans %eax
+        std::cout << "    popq %rcx\n";   // récupère a dans %rcx
+        std::cout << "    subl %eax, %ecx\n"; // %ecx = a - b
+        std::cout << "    movl %ecx, %eax\n";  // mettre le résultat dans %eax
+    }
     return 0;
 }
 
