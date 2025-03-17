@@ -5,7 +5,8 @@
 #include <map>
 #include <string>
 
-class CodeGenVisitor : public ifccBaseVisitor {
+class CodeGenVisitor : public ifccBaseVisitor
+{
 private:
     std::map<std::string, int> variables;
     int totalVars = 0;
@@ -25,4 +26,5 @@ public:
     virtual antlrcpp::Any visitVariableExpression(ifccParser::VariableExpressionContext *ctx) override;
     virtual antlrcpp::Any visitConstantExpression(ifccParser::ConstantExpressionContext *ctx) override;
     virtual antlrcpp::Any visitComparisonExpression(ifccParser::ComparisonExpressionContext *ctx) override;
+    virtual antlrcpp::Any visitFunctionCallExpression(ifccParser::FunctionCallExpressionContext *ctx) override;
 };

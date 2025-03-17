@@ -24,6 +24,7 @@ expr
     | expr '-' expr                                 # SubExpression
     | expr op=('=='|'!='|'<'|'>'|'<='|'>=') expr    # ComparisonExpression
     | '(' expr ')'                                  # ParenthesisExpression
+    | VAR '(' (expr (',' expr)*)? ')'               # FunctionCallExpression
     | VAR                                           # VariableExpression
     | CONST                                         # ConstantExpression
     ;

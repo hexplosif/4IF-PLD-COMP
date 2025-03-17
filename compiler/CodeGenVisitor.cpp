@@ -1,24 +1,27 @@
 #include "CodeGenVisitor.h"
 
 // Pour rappel : pour N variables, la 1ère déclarée aura offset = -4 * N, la 2ème = -4 * (N-1), ..., la dernière = -4.
-antlrcpp::Any CodeGenVisitor::visitProg(ifccParser::ProgContext *ctx) {
+antlrcpp::Any CodeGenVisitor::visitProg(ifccParser::ProgContext *ctx)
+{
     // Première passe : compter le nombre de variables déclarées
     totalVars = 0;
-    for (auto stmt : ctx->stmt()) {
-        if (auto decl = dynamic_cast<ifccParser::Decl_stmtContext *>(stmt)) {
+    for (auto stmt : ctx->stmt())
+    {
+        if (auto decl = dynamic_cast<ifccParser::Decl_stmtContext *>(stmt))
+        {
             totalVars++;
         }
     }
     currentDeclIndex = 0; // Réinitialiser le compteur
 
-    // Prologue
-    #ifdef __APPLE__
+// Prologue
+#ifdef __APPLE__
     std::cout << ".globl _main\n";
     std::cout << "_main:\n";
-    #else
+#else
     std::cout << ".globl main\n";
     std::cout << "main:\n";
-    #endif
+#endif
 
     std::cout << "    pushq %rbp\n";
     std::cout << "    movq %rsp, %rbp\n";
@@ -26,12 +29,14 @@ antlrcpp::Any CodeGenVisitor::visitProg(ifccParser::ProgContext *ctx) {
     // Allouer l'espace pour les variables (totalVars * 4, aligné à 16 octets)
     int stackSize = totalVars * 4;
     stackSize = (stackSize + 15) & ~15; // alignement à 16
-    if (stackSize > 0) {
+    if (stackSize > 0)
+    {
         std::cout << "    subq $" << stackSize << ", %rsp\n";
     }
 
     // Visiter toutes les instructions
-    for (auto stmt : ctx->stmt()) {
+    for (auto stmt : ctx->stmt())
+    {
         visit(stmt);
     }
 
@@ -45,7 +50,8 @@ antlrcpp::Any CodeGenVisitor::visitProg(ifccParser::ProgContext *ctx) {
     return 0;
 }
 
-antlrcpp::Any CodeGenVisitor::visitDecl_stmt(ifccParser::Decl_stmtContext *ctx) {
+antlrcpp::Any CodeGenVisitor::visitDecl_stmt(ifccParser::Decl_stmtContext *ctx)
+{
     std::string varName = ctx->VAR()->getText();
     // Incrémenter le compteur de déclaration
     currentDeclIndex++;
@@ -53,16 +59,19 @@ antlrcpp::Any CodeGenVisitor::visitDecl_stmt(ifccParser::Decl_stmtContext *ctx) 
     int offset = -4 * (totalVars - currentDeclIndex + 1);
     variables[varName] = offset;
 
-    if (ctx->expr()) {
+    if (ctx->expr())
+    {
         visit(ctx->expr()); // Évaluer l'expression
         std::cout << "    movl %eax, " << offset << "(%rbp)" << "\n";
     }
     return 0;
 }
 
-antlrcpp::Any CodeGenVisitor::visitAssign_stmt(ifccParser::Assign_stmtContext *ctx) {
+antlrcpp::Any CodeGenVisitor::visitAssign_stmt(ifccParser::Assign_stmtContext *ctx)
+{
     std::string varName = ctx->VAR()->getText();
-    if (variables.find(varName) == variables.end()) {
+    if (variables.find(varName) == variables.end())
+    {
         std::cerr << "error: variable " << varName << " not declared\n";
         exit(1);
     }
@@ -71,44 +80,49 @@ antlrcpp::Any CodeGenVisitor::visitAssign_stmt(ifccParser::Assign_stmtContext *c
     return 0;
 }
 
-antlrcpp::Any CodeGenVisitor::visitReturn_stmt(ifccParser::Return_stmtContext *ctx) {
+antlrcpp::Any CodeGenVisitor::visitReturn_stmt(ifccParser::Return_stmtContext *ctx)
+{
     visit(ctx->expr());
     return 0;
 }
 
-antlrcpp::Any CodeGenVisitor::visitAddExpression(ifccParser::AddExpressionContext *ctx) {
+antlrcpp::Any CodeGenVisitor::visitAddExpression(ifccParser::AddExpressionContext *ctx)
+{
     // a + b : évaluer a puis b
-    visit(ctx->expr(0)); // évalue a, résultat dans %eax
-    std::cout << "    pushq %rax\n";  // sauvegarde a
-    visit(ctx->expr(1)); // évalue b, résultat dans %eax
-    std::cout << "    popq %rcx\n";   // récupère a dans %rcx
+    visit(ctx->expr(0));                  // évalue a, résultat dans %eax
+    std::cout << "    pushq %rax\n";      // sauvegarde a
+    visit(ctx->expr(1));                  // évalue b, résultat dans %eax
+    std::cout << "    popq %rcx\n";       // récupère a dans %rcx
     std::cout << "    addl %ecx, %eax\n"; // %eax = a + b
     return 0;
 }
 
-antlrcpp::Any CodeGenVisitor::visitBitwiseAndExpression(ifccParser::BitwiseAndExpressionContext *ctx) {
-    visit(ctx->expr(0));  
-    std::cout << "    pushq %rax\n";  // Sauvegarder le résultat
-    visit(ctx->expr(1));  
-    std::cout << "    popq %rcx\n";   // Récupérer le premier opérande dans %rcx
+antlrcpp::Any CodeGenVisitor::visitBitwiseAndExpression(ifccParser::BitwiseAndExpressionContext *ctx)
+{
+    visit(ctx->expr(0));
+    std::cout << "    pushq %rax\n"; // Sauvegarder le résultat
+    visit(ctx->expr(1));
+    std::cout << "    popq %rcx\n";       // Récupérer le premier opérande dans %rcx
     std::cout << "    andl %ecx, %eax\n"; // Faire le AND
     return 0;
-    }
+}
 
-antlrcpp::Any CodeGenVisitor::visitBitwiseOrExpression(ifccParser::BitwiseOrExpressionContext *ctx) {
-    visit(ctx->expr(0));  
-    std::cout << "    pushq %rax\n";  // Sauvegarder le résultat
-    visit(ctx->expr(1));  
-    std::cout << "    popq %rcx\n";   // Récupérer le premier opérande dans %rcx
+antlrcpp::Any CodeGenVisitor::visitBitwiseOrExpression(ifccParser::BitwiseOrExpressionContext *ctx)
+{
+    visit(ctx->expr(0));
+    std::cout << "    pushq %rax\n"; // Sauvegarder le résultat
+    visit(ctx->expr(1));
+    std::cout << "    popq %rcx\n";      // Récupérer le premier opérande dans %rcx
     std::cout << "    orl %ecx, %eax\n"; // Faire le OR
     return 0;
 }
 
-antlrcpp::Any CodeGenVisitor::visitBitwiseXorExpression(ifccParser::BitwiseXorExpressionContext *ctx) {
-    visit(ctx->expr(0));  
-    std::cout << "    pushq %rax\n";  // Sauvegarder le résultat
-    visit(ctx->expr(1));  
-    std::cout << "    popq %rcx\n";   // Récupérer le premier opérande dans %rcx
+antlrcpp::Any CodeGenVisitor::visitBitwiseXorExpression(ifccParser::BitwiseXorExpressionContext *ctx)
+{
+    visit(ctx->expr(0));
+    std::cout << "    pushq %rax\n"; // Sauvegarder le résultat
+    visit(ctx->expr(1));
+    std::cout << "    popq %rcx\n";       // Récupérer le premier opérande dans %rcx
     std::cout << "    xorl %ecx, %eax\n"; // Faire le XOR
     return 0;
 }
@@ -116,23 +130,24 @@ antlrcpp::Any CodeGenVisitor::visitBitwiseXorExpression(ifccParser::BitwiseXorEx
 antlrcpp::Any CodeGenVisitor::visitSubExpression(ifccParser::SubExpressionContext *ctx)
 {
     // Évaluer a (l'opérande gauche)
-    visit(ctx->expr(0));         // a dans %eax
-    std::cout << "    pushq %rax\n";  // Empiler a
+    visit(ctx->expr(0));             // a dans %eax
+    std::cout << "    pushq %rax\n"; // Empiler a
 
     // Évaluer b (l'opérande droite)
-    visit(ctx->expr(1));         // b dans %eax
+    visit(ctx->expr(1)); // b dans %eax
 
     // Dépiler a dans %rcx
-    std::cout << "    popq %rcx\n";   
+    std::cout << "    popq %rcx\n";
 
     // Calculer a - b
     std::cout << "    subl %eax, %ecx\n"; // %ecx = a - b
-    std::cout << "    movl %ecx, %eax\n";  // mettre le résultat dans %eax
+    std::cout << "    movl %ecx, %eax\n"; // mettre le résultat dans %eax
 
     return 0;
 }
 
-antlrcpp::Any CodeGenVisitor::visitMulExpression(ifccParser::MulExpressionContext *ctx) {
+antlrcpp::Any CodeGenVisitor::visitMulExpression(ifccParser::MulExpressionContext *ctx)
+{
     visit(ctx->expr(0));
     std::cout << "    pushq %rax\n";
     visit(ctx->expr(1));
@@ -141,9 +156,11 @@ antlrcpp::Any CodeGenVisitor::visitMulExpression(ifccParser::MulExpressionContex
     return 0;
 }
 
-antlrcpp::Any CodeGenVisitor::visitVariableExpression(ifccParser::VariableExpressionContext *ctx) {
+antlrcpp::Any CodeGenVisitor::visitVariableExpression(ifccParser::VariableExpressionContext *ctx)
+{
     std::string varName = ctx->VAR()->getText();
-    if (variables.find(varName) == variables.end()) {
+    if (variables.find(varName) == variables.end())
+    {
         std::cerr << "error: variable " << varName << " not declared\n";
         exit(1);
     }
@@ -151,38 +168,103 @@ antlrcpp::Any CodeGenVisitor::visitVariableExpression(ifccParser::VariableExpres
     return 0;
 }
 
-antlrcpp::Any CodeGenVisitor::visitConstantExpression(ifccParser::ConstantExpressionContext *ctx) {
+antlrcpp::Any CodeGenVisitor::visitConstantExpression(ifccParser::ConstantExpressionContext *ctx)
+{
     int value = stoi(ctx->CONST()->getText());
     std::cout << "    movl $" << value << ", %eax" << "\n";
     return 0;
 }
 
-
-antlrcpp::Any CodeGenVisitor::visitComparisonExpression(ifccParser::ComparisonExpressionContext *ctx) {
+antlrcpp::Any CodeGenVisitor::visitComparisonExpression(ifccParser::ComparisonExpressionContext *ctx)
+{
     visit(ctx->expr(0)); // Évalue l'opérande gauche
     std::cout << "    pushq %rax\n";
     visit(ctx->expr(1)); // Évalue l'opérande droite
     std::cout << "    popq %rcx\n";
-    
+
     std::cout << "    cmpl %eax, %ecx\n"; // Compare ecx (gauche) et eax (droite)
-    
+
     std::string op = ctx->op->getText();
-    
-    if (op == "==") {
+
+    if (op == "==")
+    {
         std::cout << "    sete %al\n";
-    } else if (op == "!=") {
+    }
+    else if (op == "!=")
+    {
         std::cout << "    setne %al\n";
-    } else if (op == "<") {
+    }
+    else if (op == "<")
+    {
         std::cout << "    setl %al\n";
-    } else if (op == ">") {
+    }
+    else if (op == ">")
+    {
         std::cout << "    setg %al\n";
-    } else if (op == "<=") {                // Bonus
+    }
+    else if (op == "<=")
+    { // Bonus
         std::cout << "    setle %al\n";
-    } else if (op == ">=") {                // Bonus
+    }
+    else if (op == ">=")
+    { // Bonus
         std::cout << "    setge %al\n";
     }
-    
+
     std::cout << "    movzbl %al, %eax\n"; // Convertit le résultat booléen en 32 bits
-    
+
+    return 0;
+}
+
+antlrcpp::Any CodeGenVisitor::visitFunctionCallExpression(ifccParser::FunctionCallExpressionContext *ctx)
+{
+    // Get the function name from the VAR token
+    std::string funcName = ctx->VAR()->getText();
+
+    // Get the list of argument expressions
+    auto args = ctx->expr();
+
+    // Check if the function call has more than 6 arguments.
+    if (args.size() > 6)
+    {
+        std::cerr << "Error: function call with more than 6 arguments not supported." << std::endl;
+        exit(1);
+    }
+
+    // Evaluate each argument and move the result into the appropriate register.
+    // According to the Linux System V AMD64 ABI, the first six integer arguments go in:
+    // 1st: %rdi, 2nd: %rsi, 3rd: %rdx, 4th: %rcx, 5th: %r8, 6th: %r9.
+    // Here we assume that the result of an expression is left in %eax, so we move
+    // that 32-bit value into the corresponding register (using the "d" suffix for the lower 32 bits).
+    for (size_t i = 0; i < args.size(); i++)
+    {
+        visit(args[i]);
+        switch (i)
+        {
+        case 0:
+            std::cout << "    movl %eax, %edi\n";
+            break;
+        case 1:
+            std::cout << "    movl %eax, %esi\n";
+            break;
+        case 2:
+            std::cout << "    movl %eax, %edx\n";
+            break;
+        case 3:
+            std::cout << "    movl %eax, %ecx\n";
+            break;
+        case 4:
+            std::cout << "    movl %eax, %r8d\n";
+            break;
+        case 5:
+            std::cout << "    movl %eax, %r9d\n";
+            break;
+        }
+    }
+
+    // Finally, generate the call instruction
+    std::cout << "    call " << funcName << "\n";
+
+    // The function's return value (if any) will be in %eax.
     return 0;
 }
