@@ -12,7 +12,7 @@ main:
     movl -4(%rbp), %eax
     popq %rcx
     imull %ecx, %eax
-    movl %eax, -8(%rbp)
+    movl %eax, 8(%rbp)
     movl -8(%rbp), %eax
     movq %rbp, %rsp
     popq %rbp

@@ -4,7 +4,7 @@ main:
     movq %rsp, %rbp
     subq $16, %rsp
     movl $10, %eax
-    movl %eax, -4(%rbp)
+    movl %eax, 4(%rbp)
     movl -4(%rbp), %eax
     movq %rbp, %rsp
     popq %rbp
