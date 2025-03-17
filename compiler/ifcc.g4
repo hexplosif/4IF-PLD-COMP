@@ -20,8 +20,7 @@ expr
     | expr '^' expr                                 # BitwiseXorExpression
     | expr '|' expr                                 # BitwiseOrExpression
     | expr '*' expr                                 # MulExpression
-    | expr '+' expr                                 # AddExpression
-    | expr '-' expr                                 # SubExpression
+    | expr op=('+'|'-') expr                        # AddSubExpression
     | expr op=('=='|'!='|'<'|'>'|'<='|'>=') expr    # ComparisonExpression
     | '(' expr ')'                                  # ParenthesisExpression
     | VAR                                           # VariableExpression
