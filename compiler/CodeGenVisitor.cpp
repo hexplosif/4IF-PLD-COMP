@@ -5,7 +5,7 @@ antlrcpp::Any CodeGenVisitor::visitProg(ifccParser::ProgContext *ctx) {
     // Première passe : compter le nombre de variables déclarées
     totalVars = 0;
     for (auto stmt : ctx->stmt()) {
-        if (auto decl = dynamic_cast<ifccParser::Decl_stmtContext *>(stmt)) {
+        if (dynamic_cast<ifccParser::DeclarationStatementContext *>(stmt) != nullptr) {
             totalVars++;
         }
     }
@@ -46,12 +46,13 @@ antlrcpp::Any CodeGenVisitor::visitProg(ifccParser::ProgContext *ctx) {
 }
 
 antlrcpp::Any CodeGenVisitor::visitDecl_stmt(ifccParser::Decl_stmtContext *ctx) {
+    std::string varType = ctx->type()->getText();
     std::string varName = ctx->VAR()->getText();
     // Incrémenter le compteur de déclaration
     currentDeclIndex++;
     // Calculer l'offset : première déclaration -> -4*totalVars, dernière -> -4*1
     int offset = -4 * (totalVars - currentDeclIndex + 1);
-    variables[varName] = offset;
+    variables[varName] = Parameters{varType, offset};
 
     if (ctx->expr()) {
         visit(ctx->expr()); // Évaluer l'expression
@@ -67,7 +68,7 @@ antlrcpp::Any CodeGenVisitor::visitAssign_stmt(ifccParser::Assign_stmtContext *c
         exit(1);
     }
     visit(ctx->expr());
-    std::cout << "    movl %eax, " << variables[varName] << "(%rbp)" << "\n";
+    std::cout << "    movl %eax, " << variables[varName].offset << "(%rbp)" << "\n";
     return 0;
 }
 
@@ -147,13 +148,20 @@ antlrcpp::Any CodeGenVisitor::visitVariableExpression(ifccParser::VariableExpres
         std::cerr << "error: variable " << varName << " not declared\n";
         exit(1);
     }
-    std::cout << "    movl " << variables[varName] << "(%rbp), %eax" << "\n";
+    std::cout << "    movl " << variables[varName].offset << "(%rbp), %eax" << "\n";
     return 0;
 }
 
 antlrcpp::Any CodeGenVisitor::visitConstantExpression(ifccParser::ConstantExpressionContext *ctx) {
     int value = stoi(ctx->CONST()->getText());
     std::cout << "    movl $" << value << ", %eax" << "\n";
+    return 0;
+}
+
+antlrcpp::Any CodeGenVisitor::visitConstantCharExpression(ifccParser::ConstantCharExpressionContext *ctx) {
+    std::string value = ctx->CONST_CHAR()->getText().substr(1, 1);
+	int convertValue = value[0];
+    std::cout << "    movl $" << convertValue << ", %eax" << "\n";
     return 0;
 }
 

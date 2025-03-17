@@ -5,9 +5,14 @@
 #include <map>
 #include <string>
 
+struct Parameters
+{
+    std::string type = "";
+    int offset = -1;
+};
 class CodeGenVisitor : public ifccBaseVisitor {
 private:
-    std::map<std::string, int> variables;
+    std::map<std::string, Parameters> variables;
     int totalVars = 0;
     int currentDeclIndex = 0; // Compteur de déclaration (1ère déclaration, 2ème, etc.)
 
@@ -24,5 +29,6 @@ public:
     virtual antlrcpp::Any visitBitwiseXorExpression(ifccParser::BitwiseXorExpressionContext *ctx) override;
     virtual antlrcpp::Any visitVariableExpression(ifccParser::VariableExpressionContext *ctx) override;
     virtual antlrcpp::Any visitConstantExpression(ifccParser::ConstantExpressionContext *ctx) override;
+    virtual antlrcpp::Any visitConstantCharExpression(ifccParser::ConstantCharExpressionContext *ctx) override;
     virtual antlrcpp::Any visitComparisonExpression(ifccParser::ComparisonExpressionContext *ctx) override;
 };
