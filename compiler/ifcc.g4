@@ -16,7 +16,7 @@ assign_stmt : VAR '=' expr ';' ;         // Affectation
 return_stmt: 'return' expr ';' ;  // On retourne une expression
 
 expr 
-    : expr '*' expr                                 # MulExpression
+    : expr OPM expr                                 # MulDivExpression
     | expr '+' expr                                 # AddExpression
     | expr '-' expr                                 # SubExpression
     | expr op=('=='|'!='|'<'|'>'|'<='|'>=') expr    # ComparisonExpression
@@ -27,6 +27,8 @@ expr
 
 VAR   : [a-zA-Z_][a-zA-Z_0-9]* ;  // Identifiants pour les variables
 CONST : [0-9]+ ;                 // Constantes entières
+
+OPM: '*' | '/' | '%' ; // Opérateurs multiplicatifs 
 
 COMMENT : '/*' .*? '*/' -> skip ;
 DIRECTIVE : '#' .*? '\n' -> skip ;
