@@ -40,6 +40,7 @@ antlrcpp::Any CodeGenVisitor::visitProg(ifccParser::ProgContext *ctx) {
     visit(ctx->block());
 
     // Épilogue
+    std::cout << ".Lepilogue:\n"; // epilogue label
     std::cout << "    movq %rbp, %rsp\n"; // Restaurer rsp
     std::cout << "    popq %rbp\n";
     std::cout << "    ret\n";
@@ -85,7 +86,7 @@ antlrcpp::Any CodeGenVisitor::visitAssign_stmt(ifccParser::Assign_stmtContext *c
 // Gestion de l'instruction return
 antlrcpp::Any CodeGenVisitor::visitReturn_stmt(ifccParser::Return_stmtContext *ctx) {
     visit(ctx->expr());
-    // Dans un cas plus complet, vous pourriez générer un jump vers l'épilogue ici.
+    std::cout << "    jmp .Lepilogue\n"; // Aller à l'épilogue
     return 0;
 }
 
