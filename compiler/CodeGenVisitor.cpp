@@ -217,6 +217,53 @@ antlrcpp::Any CodeGenVisitor::visitBitwiseXorExpression(ifccParser::BitwiseXorEx
     return 0;
 }
 
+
+antlrcpp::Any CodeGenVisitor::visitLogiqueParesseuxExpression(ifccParser::LogiqueParesseuxExpressionContext *ctx)
+{
+    std::string op = ctx->op->getText();
+    std::string labelTrue = ".L1";
+    std::string labelEnd = ".L2";
+
+    if (op == "&&")
+    {
+        visit(ctx->expr(0)); // Évaluer le premier opérande
+        std::cout << "    cmpl $0, %eax\n"; 
+        std::cout << "    je " << labelEnd << "\n"; // Sauter à la fin si faux
+
+        visit(ctx->expr(1)); // Évaluer le deuxième opérande
+        std::cout << "    cmpl $0, %eax\n"; 
+        std::cout << "    je " << labelEnd << "\n"; // Sauter à la fin si faux
+
+        std::cout << labelTrue << ":\n";
+        std::cout << "    movl $1, %eax\n"; // Les deux opérandes sont vrais
+        std::cout << "    jmp " << labelEnd << "\n";
+
+        std::cout << labelEnd << ":\n";
+        std::cout << "    movl $0, %eax\n"; // Au moins un opérande est faux
+    }
+    else if (op == "||")
+    {
+        visit(ctx->expr(0)); // Évaluer le premier opérande
+        std::cout << "    cmpl $0, %eax\n"; 
+        std::cout << "    jne " << labelTrue << "\n"; // Sauter à vrai si non zéro
+
+        visit(ctx->expr(1)); // Évaluer le deuxième opérande
+        std::cout << "    cmpl $0, %eax\n";
+        std::cout << "    jne " << labelTrue << "\n"; // Sauter à vrai si non zéro
+
+        std::cout << "    movl $0, %eax\n"; // Les deux opérandes sont faux
+        std::cout << "    jmp " << labelEnd << "\n";
+
+        std::cout << labelTrue << ":\n";
+        std::cout << "    movl $1, %eax\n"; // Au moins un opérande est vrai
+
+        std::cout << labelEnd << ":\n";
+    }
+
+    return 0;
+}
+
+
 // Gestion de l'accès à une variable
 antlrcpp::Any CodeGenVisitor::visitVariableExpression(ifccParser::VariableExpressionContext *ctx)
 {
