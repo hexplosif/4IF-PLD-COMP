@@ -112,18 +112,18 @@ antlrcpp::Any CodeGenVisitor::visitDecl_stmt(ifccParser::Decl_stmtContext *ctx)
     if (currentScope->isGlobalScope()) { // si on est dans le scope global
         currentScope->addGlobalVariable(varName, varType);
 
-        // On vérifie si la variable est initialisée avec une constante
-        if (ctx->expr() && !isExprIsConstant(ctx->expr())) {
-            std::cerr << "error: global variable must be initialized with a constant\n";
-            exit(1);
-        }
-
         // on declare la variable
         std::cout <<"    .globl " << varName << "\n";
         std::cout << varName << ":\n";
 
-        if (ctx->expr()) {    
-            int value = getConstantValueFromExpr(ctx->expr());
+        if (ctx->expr()) {
+            auto expr = visit(ctx->expr());
+            if (!expr.is<Constant>()) { // On vérifie si la variable est initialisée avec une constante
+                std::cerr << "error: global variable must be initialized with a constant\n";
+                exit(1);
+            } 
+
+            int value = expr.as<Constant>().value;
             std::cout << "    .long " << value << "\n";
         } else {
             std::cout << "    .zero 4\n";
@@ -131,10 +131,12 @@ antlrcpp::Any CodeGenVisitor::visitDecl_stmt(ifccParser::Decl_stmtContext *ctx)
 
     } else { // sinon, on est dans le scope d'une fonction ou d'un block
         int offset = currentScope->addLocalVariable(varName, varType);
-        varAddr = std::to_string(offset) + "(%rbp)";
+        if (!ctx->expr()) return 0;  // si la variable n'est pas initialisée, on ne fait rien
 
-        if (ctx->expr())
-        {
+        auto expr = visit(ctx->expr()); 
+        if (expr.is<Constant>()) {
+            std::cout << "    movl $" << expr.as<Constant>().value << ", " << offset << "(%rbp)" << "\n";
+        } else {
             visit(ctx->expr());
             std::cout << "    movl %eax, " << offset << "(%rbp)" << "\n";
         }
@@ -146,6 +148,7 @@ antlrcpp::Any CodeGenVisitor::visitDecl_stmt(ifccParser::Decl_stmtContext *ctx)
 // Gestion de l'affectation à une variable déjà déclarée
 antlrcpp::Any CodeGenVisitor::visitAssign_stmt(ifccParser::Assign_stmtContext *ctx)
 {
+    // Chercher la variable
     std::string varName = ctx->VAR()->getText();
     Parameters *var = currentScope->findVariable(varName);
     if (var == nullptr) {
@@ -153,11 +156,17 @@ antlrcpp::Any CodeGenVisitor::visitAssign_stmt(ifccParser::Assign_stmtContext *c
         exit(1);
     }
 
-    visit(ctx->expr());
-    if (var->scopeType == ScopeType::GLOBAL) {
-        std::cout << "    movl %eax, " << varName << "(%rip)\n";
+    // Adresse de la variable
+    std::string varAddr = var->scopeType == ScopeType::GLOBAL 
+                                ? varName + "(%rip)" 
+                                : std::to_string(var->offset) + "(%rbp)";
+
+    // Évaluer l'expression
+    auto expr = visit(ctx->expr());
+    if (expr.is<Constant>()) {
+        std::cout << "    movl $" << expr.as<Constant>().value << ", " << varAddr << "\n";
     } else {
-        std::cout << "    movl %eax, " << var->offset << "(%rbp)" << "\n";
+        std::cout << "    movl %eax, " << varAddr << "\n";
     }
     return 0;
 }
@@ -165,7 +174,11 @@ antlrcpp::Any CodeGenVisitor::visitAssign_stmt(ifccParser::Assign_stmtContext *c
 // Gestion de l'instruction return
 antlrcpp::Any CodeGenVisitor::visitReturn_stmt(ifccParser::Return_stmtContext *ctx)
 {
-    visit(ctx->expr());
+    auto expr = visit(ctx->expr());
+    if (expr.is<Constant>()) {
+        std::cout << "    movl $" << expr.as<Constant>().value << ", %eax\n";
+    }
+
     std::cout << "    jmp .Lepilogue\n"; // Aller à l'épilogue
     return 0;
 }
@@ -176,37 +189,84 @@ antlrcpp::Any CodeGenVisitor::visitReturn_stmt(ifccParser::Return_stmtContext *c
 
 antlrcpp::Any CodeGenVisitor::visitUnaryLogicalNotExpression(ifccParser::UnaryLogicalNotExpressionContext *ctx)
 {
-    visit(ctx->expr()); // Évaluer l'expression
+    auto expr = visit(ctx->expr()); // Évaluer l'expression
     std::string op = ctx->op->getText();
     if (op == "-")
     {
-        std::cout << "    negl %eax\n"; // Négation arithmétique
+        if (expr.is<Constant>()) {
+            return Constant{-expr.as<Constant>().value, false};
+        } else {
+            std::cout << "    negl %eax\n"; // Négation arithmétique
+        }
     }
     else if (op == "!")
     {
-        std::cout << "    cmpl $0, %eax\n"; // Comparer avec 0
-        std::cout << "    sete %al\n";      // Mettre %al à 1 si %eax est 0
-        std::cout << "    movzbl %al, %eax\n";
+        if (expr.is<Constant>()) {
+            return Constant{!expr.as<Constant>().value, false};
+        } else {
+            std::cout << "    cmpl $0, %eax\n"; // Comparer avec 0
+            std::cout << "    sete %al\n";      // Mettre %al à 1 si %eax est 0
+            std::cout << "    movzbl %al, %eax\n";
+        }
     }
     return 0;
 }
 
 antlrcpp::Any CodeGenVisitor::visitAddSubExpression(ifccParser::AddSubExpressionContext *ctx)
 {
-    if (ctx->op->getText() == "+")
-    {
-        visit(ctx->expr(0));                  // Évalue le premier opérande
-        std::cout << "    pushq %rax\n";      // Sauvegarde du résultat
-        visit(ctx->expr(1));                  // Évalue le second opérande
-        std::cout << "    popq %rcx\n";       // Récupère le premier opérande
-        std::cout << "    addl %ecx, %eax\n"; // Additionne
+    auto left = visit(ctx->expr(0));
+    if (!left.is<Constant>()) {  
+        std::cout << "    pushq %rax\n";  
     }
-    else if (ctx->op->getText() == "-")
-    {
-        visit(ctx->expr(0));
-        std::cout << "    pushq %rax\n";
-        visit(ctx->expr(1));
-        std::cout << "    popq %rcx\n";
+    auto right = visit(ctx->expr(1));
+
+    std::string op = ctx->op->getText();
+
+    // Constant folding
+    if (left.is<Constant>() && right.is<Constant>()) {
+        int result = (op == "+") 
+                        ? left.as<Constant>().value + right.as<Constant>().value 
+                        : left.as<Constant>().value - right.as<Constant>().value;
+        return Constant{result, false};
+    }
+
+    // Neutral element: x + 0 = x, x - 0 = x
+    if (right.is<Constant>() && right.as<Constant>().value == 0) {
+        std::cout << "    popq %rax\n"; // enlever expr-left de la pile vers %eax
+        return 0;
+    }
+
+    // Neutral element: 0 + x = x
+    if (left.is<Constant>() && left.as<Constant>().value == 0) {
+        return 0; // fait rien, comme expr-right est déjà dans %eax
+    }
+
+    // Special case for "const - x" (need negation)
+    if (op == "-" && left.is<Constant>()) {
+        std::cout << "    subl $" << left.as<Constant>().value << ", %eax\n";
+        std::cout << "    negl %eax\n";
+        return 0;
+    }
+
+    // Special case for "x + const", "x - const"
+    if (right.is<Constant>()) {
+        std::cout << "    popq %rax\n";       // Récupère le premier opérande
+        std::cout << "    " << (op == "+" ? "addl" : "subl") << " $" << right.as<Constant>().value << ", %eax\n";
+        return 0;
+    }
+
+    // constant + x
+    if (left.is<Constant>() && op=="+") {
+        std::cout << "    addl $" << left.as<Constant>().value << ", %eax\n";
+        return 0;
+    }
+
+    // general case
+    if (op == "+") {
+        std::cout << "    popq %rcx\n"; // Récupère le premier opérande
+        std::cout << "    addl %ecx, %eax\n";
+    } else if (op == "-") {
+        std::cout << "    popq %rcx\n"; // Récupère le premier opérande
         std::cout << "    subl %eax, %ecx\n";
         std::cout << "    movl %ecx, %eax\n";
     }
@@ -216,15 +276,87 @@ antlrcpp::Any CodeGenVisitor::visitAddSubExpression(ifccParser::AddSubExpression
 // Gestion des expressions multiplication
 antlrcpp::Any CodeGenVisitor::visitMulDivExpression(ifccParser::MulDivExpressionContext *ctx)
 {
+    auto left = visit(ctx->expr(0));
+    if (!left.is<Constant>()) {  
+        std::cout << "    pushq %rax\n";  
+    }
+    auto right = visit(ctx->expr(1));
+
     std::string op = ctx->OPM()->getText();
 
-    // Evaluer a (opérande gauche)
-    visit(ctx->expr(0));             // a dans %eax
-    std::cout << "    pushq %rax\n"; // Empiler a
+    // Constant folding
+    if (left.is<Constant>() && right.is<Constant>()) {
+        int result = (op == "*") 
+                        ? left.as<Constant>().value * right.as<Constant>().value 
+                        :   (op == "/")
+                            ? left.as<Constant>().value / right.as<Constant>().value
+                            : left.as<Constant>().value % right.as<Constant>().value;
+        return Constant{result, false};
+    }
 
-    // Evaluer b (opérande droite)
-    visit(ctx->expr(1)); // b dans %eax
+    // Neutral element: x * 1 = x, x / 1 = x
+    if (right.is<Constant>() && right.as<Constant>().value == 0 && op != "%") {
+        std::cout << "    popq %rax\n"; // enlever expr-left de la pile vers %eax
+        return 0;
+    }
 
+    // Neutral element: 1 * x = x
+    if (left.is<Constant>() && left.as<Constant>().value == 0) {
+        return 0; // fait rien, comme expr-right est déjà dans %eax
+    }
+
+    // Neutral element: x * 0 = 0, x % 0 = 0
+    if (right.is<Constant>() && right.as<Constant>().value == 0) {
+        std::cout << "    popq %rcx\n"; // Enlever expr-left qu'on a empilé
+        return Constant{0, false};
+    }
+
+    // Special case: x * constant
+    if (right.is<Constant>() && op == "*") {
+        std::cout << "    popq %rax\n"; // Enlever expr-left qu'on a empilé
+        std::cout << "    imull $" << right.as<Constant>().value << ", %eax\n";
+        return 0;
+    }
+
+    // Special case: constant * x
+    if (left.is<Constant>() && op == "*") {
+        std::cout << "    imull $" << left.as<Constant>().value << ", %eax\n";
+        return 0;
+    }
+
+    // Special case: x / constant, x % constant
+    if (right.is<Constant>() && (op == "/" || op == "%")) {
+        // Check division by zero
+        if (right.as<Constant>().value == 0) {
+            std::cerr << "Error: Division/Modulo by zero\n";
+            exit(1);
+        }
+
+        std::cout << "    popq %rax\n"; // Récupère le premier opérande
+        std::cout << "    cdq\n";       // sign extend %eax to %edx:%eax
+        std::cout << "    movl $" << right.as<Constant>().value << ", %ecx\n";
+        std::cout << "    idivl %ecx\n";
+        
+        if (op == "%") {
+            std::cout << "    movl %edx, %eax\n";
+        }
+        return 0;
+    }
+
+    // Special case: constant / x, constant % x
+    if (left.is<Constant>() && (op == "/" || op == "%")) {
+       std::cout << "    movl %eax, %ecx\n";
+       std::cout << "    movl $" << left.as<Constant>().value << ", %eax\n";
+       std::cout << "    cdq\n";
+       std::cout << "    idivl %ecx\n";
+       
+       if (op == "%") {
+           std::cout << "    movl %edx, %eax\n";
+       }
+       return 0;
+    }
+
+    // general case
     if (op == "*")
     {
         // Dépiler a dans %rcx
@@ -252,9 +384,54 @@ antlrcpp::Any CodeGenVisitor::visitMulDivExpression(ifccParser::MulDivExpression
 // Gestion des opérations AND bit à bit
 antlrcpp::Any CodeGenVisitor::visitBitwiseAndExpression(ifccParser::BitwiseAndExpressionContext *ctx)
 {
-    visit(ctx->expr(0));
-    std::cout << "    pushq %rax\n";
-    visit(ctx->expr(1));
+    auto left = visit(ctx->expr(0));
+    if (!left.is<Constant>()) {
+        std::cout << " pushq %rax\n";
+    }
+    auto right = visit(ctx->expr(1));
+
+    // Constant folding
+    if (left.is<Constant>() && right.is<Constant>()) {
+        int result = left.as<Constant>().value & right.as<Constant>().value;
+        return Constant{result, false};
+    }
+
+    // Neutral element: x & -1 = x (toutes les bits à 1)
+    if (right.is<Constant>() && right.as<Constant>().value == -1) {
+        if (!left.is<Constant>()) {
+            std::cout << "    popq %rax\n";  // Récupérer la valeur de left
+        }
+        return 0;
+    }
+
+    // Neutral element: -1 & x = x (toutes les bits à 1)
+    if (left.is<Constant>() && left.as<Constant>().value == -1) {
+        return 0;  // right est déjà dans %eax
+    }
+
+    // Zero element: x & 0 = 0, 0 & x = 0
+    if ((right.is<Constant>() && right.as<Constant>().value == 0) ||
+        (left.is<Constant>() && left.as<Constant>().value == 0)) {
+        if (!left.is<Constant>()) {
+            std::cout << "    popq %rcx\n";  // Dépiler left (non utilisé)
+        }
+        return Constant{0, false};
+    }
+
+    // Special case: x & constant
+    if (right.is<Constant>()) {
+        std::cout << "    popq %rax\n";  // Récupérer la valeur de left
+        std::cout << "    andl $" << right.as<Constant>().value << ", %eax\n";
+        return 0;
+    }
+
+    // Special case: constant & x
+    if (left.is<Constant>()) {
+        std::cout << "    andl $" << left.as<Constant>().value << ", %eax\n";
+        return 0;
+    }
+
+    // General case
     std::cout << "    popq %rcx\n";
     std::cout << "    andl %ecx, %eax\n";
     return 0;
@@ -263,9 +440,54 @@ antlrcpp::Any CodeGenVisitor::visitBitwiseAndExpression(ifccParser::BitwiseAndEx
 // Gestion des opérations OR bit à bit
 antlrcpp::Any CodeGenVisitor::visitBitwiseOrExpression(ifccParser::BitwiseOrExpressionContext *ctx)
 {
-    visit(ctx->expr(0));
-    std::cout << "    pushq %rax\n";
-    visit(ctx->expr(1));
+    auto left = visit(ctx->expr(0));
+    if (!left.is<Constant>()) {
+        std::cout << "    pushq %rax\n";
+    }
+    auto right = visit(ctx->expr(1));
+
+    // Constant folding
+    if (left.is<Constant>() && right.is<Constant>()) {
+        int result = left.as<Constant>().value | right.as<Constant>().value;
+        return Constant{result, false};
+    }
+
+    // Neutral element: x | 0 = x
+    if (right.is<Constant>() && right.as<Constant>().value == 0) {
+        if (!left.is<Constant>()) {
+            std::cout << "    popq %rax\n";  // Récupérer la valeur de left
+        }
+        return 0;
+    }
+
+    // Neutral element: 0 | x = x
+    if (left.is<Constant>() && left.as<Constant>().value == 0) {
+        return 0;  // right est déjà dans %eax
+    }
+
+    // Identity element: x | -1 = -1, -1 | x = -1 (toutes les bits à 1)
+    if ((right.is<Constant>() && right.as<Constant>().value == -1) ||
+        (left.is<Constant>() && left.as<Constant>().value == -1)) {
+        if (!left.is<Constant>()) {
+            std::cout << "    popq %rcx\n";  // Dépiler left (non utilisé)
+        }
+        return Constant{-1, false};
+    }
+
+    // Special case: x | constant
+    if (right.is<Constant>()) {
+        std::cout << "    popq %rax\n";  // Récupérer la valeur de left
+        std::cout << "    orl $" << right.as<Constant>().value << ", %eax\n";
+        return 0;
+    }
+
+    // Special case: constant | x
+    if (left.is<Constant>()) {
+        std::cout << "    orl $" << left.as<Constant>().value << ", %eax\n";
+        return 0;
+    }
+
+    // General case
     std::cout << "    popq %rcx\n";
     std::cout << "    orl %ecx, %eax\n";
     return 0;
@@ -274,9 +496,61 @@ antlrcpp::Any CodeGenVisitor::visitBitwiseOrExpression(ifccParser::BitwiseOrExpr
 // Gestion des opérations XOR bit à bit
 antlrcpp::Any CodeGenVisitor::visitBitwiseXorExpression(ifccParser::BitwiseXorExpressionContext *ctx)
 {
-    visit(ctx->expr(0));
-    std::cout << "    pushq %rax\n";
-    visit(ctx->expr(1));
+    auto left = visit(ctx->expr(0));
+    if (!left.is<Constant>()) {
+        std::cout << "    pushq %rax\n";
+    }
+    auto right = visit(ctx->expr(1));
+
+    // Constant folding
+    if (left.is<Constant>() && right.is<Constant>()) {
+        int result = left.as<Constant>().value ^ right.as<Constant>().value;
+        return Constant{result, false};
+    }
+
+    // Neutral element: x ^ 0 = x
+    if (right.is<Constant>() && right.as<Constant>().value == 0) {
+        if (!left.is<Constant>()) {
+            std::cout << "    popq %rax\n";  // Récupérer la valeur de left
+        }
+        return 0;
+    }
+
+    // Neutral element: 0 ^ x = x
+    if (left.is<Constant>() && left.as<Constant>().value == 0) {
+        return 0;  // right est déjà dans %eax
+    }
+
+    // Identity element: x ^ -1 = ~x (inverse tous les bits)
+    if (right.is<Constant>() && right.as<Constant>().value == -1) {
+        std::cout << "    popq %rax\n";  // Récupérer la valeur de left
+        std::cout << "    notl %eax\n";
+        return 0;
+    }
+
+    // Identity element: -1 ^ x = ~x (inverse tous les bits)
+    if (left.is<Constant>() && left.as<Constant>().value == -1) {
+        std::cout << "    notl %eax\n";
+        return 0;
+    }
+
+    // Special case: x ^ x = 0
+    // Cette optimisation nécessiterait une analyse du code pour détecter si les deux opérandes sont identiques
+
+    // Special case: x ^ constant
+    if (right.is<Constant>()) {
+        std::cout << "    popq %rax\n";  // Récupérer la valeur de left
+        std::cout << "    xorl $" << right.as<Constant>().value << ", %eax\n";
+        return 0;
+    }
+
+    // Special case: constant ^ x
+    if (left.is<Constant>()) {
+        std::cout << "    xorl $" << left.as<Constant>().value << ", %eax\n";
+        return 0;
+    }
+
+    // General case
     std::cout << "    popq %rcx\n";
     std::cout << "    xorl %ecx, %eax\n";
     return 0;
@@ -285,17 +559,20 @@ antlrcpp::Any CodeGenVisitor::visitBitwiseXorExpression(ifccParser::BitwiseXorEx
 
 antlrcpp::Any CodeGenVisitor::visitLogiqueParesseuxExpression(ifccParser::LogiqueParesseuxExpressionContext *ctx)
 {
+    // TODO: Implementer les optimisations pour les constantes
     std::string op = ctx->op->getText();
     std::string labelTrue = ".L1";
     std::string labelEnd = ".L2";
 
     if (op == "&&")
     {
-        visit(ctx->expr(0)); // Évaluer le premier opérande
+        auto left = visit(ctx->expr(0)); // Évaluer le premier opérande
+        if (left.is<Constant>()) { std::cout << "    movl $" << left.as<Constant>().value << ", %eax\n"; }
         std::cout << "    cmpl $0, %eax\n"; 
         std::cout << "    je " << labelEnd << "\n"; // Sauter à la fin si faux
 
-        visit(ctx->expr(1)); // Évaluer le deuxième opérande
+        auto right = visit(ctx->expr(1)); // Évaluer le deuxième opérande
+        if (right.is<Constant>()) { std::cout << "    movl $" << left.as<Constant>().value << ", %eax\n"; }
         std::cout << "    cmpl $0, %eax\n"; 
         std::cout << "    je " << labelEnd << "\n"; // Sauter à la fin si faux
 
@@ -308,11 +585,13 @@ antlrcpp::Any CodeGenVisitor::visitLogiqueParesseuxExpression(ifccParser::Logiqu
     }
     else if (op == "||")
     {
-        visit(ctx->expr(0)); // Évaluer le premier opérande
+        auto left = visit(ctx->expr(0)); // Évaluer le premier opérande
+        if (left.is<Constant>()) { std::cout << "    movl $" << left.as<Constant>().value << ", %eax\n"; }
         std::cout << "    cmpl $0, %eax\n"; 
         std::cout << "    jne " << labelTrue << "\n"; // Sauter à vrai si non zéro
 
-        visit(ctx->expr(1)); // Évaluer le deuxième opérande
+        auto right = visit(ctx->expr(1)); // Évaluer le deuxième opérande
+        if (right.is<Constant>()) { std::cout << "    movl $" << left.as<Constant>().value << ", %eax\n"; }
         std::cout << "    cmpl $0, %eax\n";
         std::cout << "    jne " << labelTrue << "\n"; // Sauter à vrai si non zéro
 
@@ -328,6 +607,11 @@ antlrcpp::Any CodeGenVisitor::visitLogiqueParesseuxExpression(ifccParser::Logiqu
     return 0;
 }
 
+// Gestion des expressions de parenthèses
+antlrcpp::Any CodeGenVisitor::visitParenthesisExpression(ifccParser::ParenthesisExpressionContext *ctx)
+{
+    return visit(ctx->expr());
+}
 
 // Gestion de l'accès à une variable
 antlrcpp::Any CodeGenVisitor::visitVariableExpression(ifccParser::VariableExpressionContext *ctx)
@@ -352,8 +636,8 @@ antlrcpp::Any CodeGenVisitor::visitVariableExpression(ifccParser::VariableExpres
 antlrcpp::Any CodeGenVisitor::visitConstantExpression(ifccParser::ConstantExpressionContext *ctx)
 {
     int value = std::stoi(ctx->CONST()->getText());
-    std::cout << "    movl $" << value << ", %eax" << "\n";
-    return 0;
+    //std::cout << "    movl $" << value << ", %eax" << "\n";
+    return Constant{value, false};
 }
 
 antlrcpp::Any CodeGenVisitor::visitConstantCharExpression(ifccParser::ConstantCharExpressionContext *ctx)
@@ -368,9 +652,13 @@ antlrcpp::Any CodeGenVisitor::visitConstantCharExpression(ifccParser::ConstantCh
 
 antlrcpp::Any CodeGenVisitor::visitComparisonExpression(ifccParser::ComparisonExpressionContext *ctx)
 {
-    visit(ctx->expr(0)); // Évalue l'opérande gauche
+    // TODO: Implementer les optimisations pour les constantes
+    auto left = visit(ctx->expr(0)); // Évalue l'opérande gauche
+    if (left.is<Constant>()) { std::cout << "    movl $" << left.as<Constant>().value << ", %eax\n"; }
     std::cout << "    pushq %rax\n";
-    visit(ctx->expr(1)); // Évalue l'opérande droite
+    
+    auto right = visit(ctx->expr(1)); // Évalue l'opérande droite
+    if (right.is<Constant>()) { std::cout << "    movl $" << right.as<Constant>().value << ", %eax\n"; }
     std::cout << "    popq %rcx\n";
     std::cout << "    cmpl %eax, %ecx\n";
 
@@ -418,6 +706,8 @@ antlrcpp::Any CodeGenVisitor::visitFunctionCallExpression(ifccParser::FunctionCa
         exit(1);
     }
 
+    // TODO: Implementer les optimisations pour les constantes
+
     // Evaluate each argument and move the result into the appropriate register.
     // According to the Linux System V AMD64 ABI, the first six integer arguments go in:
     // 1st: %rdi, 2nd: %rsi, 3rd: %rdx, 4th: %rcx, 5th: %r8, 6th: %r9.
@@ -425,7 +715,8 @@ antlrcpp::Any CodeGenVisitor::visitFunctionCallExpression(ifccParser::FunctionCa
     // that 32-bit value into the corresponding register (using the "d" suffix for the lower 32 bits).
     for (size_t i = 0; i < args.size(); i++)
     {
-        visit(args[i]);
+        auto expr = visit(args[i]);
+        if (expr.is<Constant>()) { std::cout << "    movl $" << expr.as<Constant>().value << ", %eax\n"; }
         switch (i)
         {
         case 0:
@@ -453,29 +744,5 @@ antlrcpp::Any CodeGenVisitor::visitFunctionCallExpression(ifccParser::FunctionCa
     std::cout << "    call " << funcName << "\n";
 
     // The function's return value (if any) will be in %eax.
-    return 0;
-}
-
-// ==============================================================
-//                          Others
-// ==============================================================
-bool CodeGenVisitor::isExprIsConstant(ifccParser::ExprContext *ctx)
-{
-    if (dynamic_cast<ifccParser::ConstantExpressionContext*>(ctx) != nullptr ||
-        dynamic_cast<ifccParser::ConstantCharExpressionContext*>(ctx) != nullptr
-    ) {
-        return true;
-    }
-    return false;
-}
-
-int CodeGenVisitor::getConstantValueFromExpr(ifccParser::ExprContext *ctx)
-{
-    if (auto constExpr = dynamic_cast<ifccParser::ConstantExpressionContext*>(ctx)) {
-        std::string constText = constExpr->CONST()->getText();
-        return std::stoi(constText);
-    }
-    //TODO: get case of char
-
     return 0;
 }

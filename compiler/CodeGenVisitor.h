@@ -7,6 +7,10 @@
 #include "generated/ifccBaseVisitor.h"
 #include "SymbolTable.h"
 
+struct Constant {
+    int value;
+    bool isChar;
+};
 
 class CodeGenVisitor : public ifccBaseVisitor
 {
@@ -15,8 +19,6 @@ private:
 
     // Fonction récursive pour compter les déclarations dans l'arbre
     int countDeclarations(antlr4::tree::ParseTree *tree);
-    bool isExprIsConstant(ifccParser::ExprContext *ctx);
-    int getConstantValueFromExpr(ifccParser::ExprContext *ctx);
 
 public:
     virtual antlrcpp::Any visitProg(ifccParser::ProgContext *ctx) override;
@@ -36,6 +38,7 @@ public:
 
     virtual antlrcpp::Any visitAddSubExpression(ifccParser::AddSubExpressionContext *ctx) override;
     virtual antlrcpp::Any visitMulDivExpression(ifccParser::MulDivExpressionContext *ctx) override;
+    virtual antlrcpp::Any visitParenthesisExpression(ifccParser::ParenthesisExpressionContext *ctx) override;
     virtual antlrcpp::Any visitVariableExpression(ifccParser::VariableExpressionContext *ctx) override;
     virtual antlrcpp::Any visitConstantExpression(ifccParser::ConstantExpressionContext *ctx) override;
     virtual antlrcpp::Any visitConstantCharExpression(ifccParser::ConstantCharExpressionContext *ctx) override;
