@@ -9,6 +9,11 @@ enum VarType {
     CHAR
 };
 
+struct Constant {
+    int value;
+    VarType type;
+};
+
 enum ScopeType {
     GLOBAL,
     FUNCTION_PARAMS,

@@ -14,7 +14,8 @@ stmt
     | block                  # BlockStatement
     ;
 
-decl_stmt : type VAR ('=' expr)? ';' ;  // Déclaration avec ou sans affectation
+decl_stmt : type sub_decl (',' sub_decl)* ';' ;  // Déclaration avec ou sans affectation
+sub_decl : VAR ('=' expr)? ;                // Sub-règle pour les déclarations
 assign_stmt : VAR '=' expr ';' ;         // Affectation
 return_stmt : 'return' expr ';' ;         // On retourne une expression
 

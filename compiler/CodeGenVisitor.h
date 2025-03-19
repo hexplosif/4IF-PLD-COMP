@@ -7,18 +7,16 @@
 #include "generated/ifccBaseVisitor.h"
 #include "SymbolTable.h"
 
-struct Constant {
-    int value;
-    bool isChar;
-};
-
 class CodeGenVisitor : public ifccBaseVisitor
 {
 private:
     SymbolTable* currentScope = nullptr; //see SymbolTable.h
+    std::string currentTypeInMultiDeclaration; //used to store the type of the variable in a multi declaration
 
     // Fonction récursive pour compter les déclarations dans l'arbre
     int countDeclarations(antlr4::tree::ParseTree *tree);
+
+    std::string generateLabel(); 
 
 public:
     virtual antlrcpp::Any visitProg(ifccParser::ProgContext *ctx) override;
@@ -29,6 +27,7 @@ public:
 
     virtual antlrcpp::Any visitBlock(ifccParser::BlockContext *ctx) override;
     virtual antlrcpp::Any visitDecl_stmt(ifccParser::Decl_stmtContext *ctx) override;
+    virtual antlrcpp::Any visitSub_decl(ifccParser::Sub_declContext *ctx) override;
     virtual antlrcpp::Any visitAssign_stmt(ifccParser::Assign_stmtContext *ctx) override;
     virtual antlrcpp::Any visitReturn_stmt(ifccParser::Return_stmtContext *ctx) override;
 
