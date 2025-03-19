@@ -141,7 +141,6 @@ antlrcpp::Any CodeGenVisitor::visitSub_decl(ifccParser::Sub_declContext *ctx) {
         }
 
     } else { // sinon, on est dans le scope d'une fonction ou d'un block
-        std::cout << "    #    Local Sub_decl: " << varName << std::endl;
         int offset = currentScope->addLocalVariable(varName, varType);
         varAddr = std::to_string(offset) + "(%rbp)";
 
