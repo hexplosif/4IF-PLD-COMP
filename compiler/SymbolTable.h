@@ -1,5 +1,4 @@
-#ifndef SYMBOLTABLE_H
-#define SYMBOLTABLE_H
+#pragma once
 
 #include <iostream>
 #include <map>
@@ -64,5 +63,3 @@ class SymbolTable
         static constexpr std::array<VarType, 2> typeRank = {VarType::CHAR, VarType::INT};
             // char < int < unsigned int < long < unsigned long < long long < unsigned long long < float < double < long double
 };
-
-#endif // SYMBOLTABLE_H

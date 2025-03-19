@@ -23,16 +23,15 @@ antlrcpp::Any CodeGenVisitor::visitProg(ifccParser::ProgContext *ctx)
     // Ca veut dire chaque fonction a son propre offset pour les variables.
     // Donc il faut recalculer les offsets pour chaque fonction, pas dans le visitProg.
 
-    //int totalVars = countDeclarations(ctx->block());
-    //currentDeclIndex = 0;
+    // int totalVars = countDeclarations(ctx->block());
+    // currentDeclIndex = 0;
 
-    if (!ctx->decl_stmt().empty()) { //si on a des variables globales
+    if (!ctx->decl_stmt().empty())
+    { // si on a des variables globales
         std::cout << "    .data\n";
     }
 
-    currentScope = new SymbolTable(0); //global scope
-
-    // Visiter tous decl_stmt 
+    // Visiter tous decl_stmt
     for (auto decl : ctx->decl_stmt())
     {
         visit(decl);
@@ -66,24 +65,27 @@ antlrcpp::Any CodeGenVisitor::visitBlock(ifccParser::BlockContext *ctx)
 {
     // Creer un nouveau scope quand on entre un nouveau block
     int offset;
-    if ( currentScope->isGlobalScope() ) {      // si ce bloc est une fonction, comme GlobalScope -> FunctionScope -> BlockScope
+    if (currentScope->isGlobalScope())
+    { // si ce bloc est une fonction, comme GlobalScope -> FunctionScope -> BlockScope
         // On calculate tous les variables dans la fonction et chercher le premier offset
-        int totalVars = countDeclarations(ctx); 
+        int totalVars = countDeclarations(ctx);
         offset = -totalVars * 4;
 
         // Allouer l'espace pour les variables (4 octets par variable, aligné à 16 octets)
         int stackSize = totalVars * 4;
         stackSize = (stackSize + 15) & ~15;
-        if (stackSize > 0) {
+        if (stackSize > 0)
+        {
             std::cout << "    subq $" << stackSize << ", %rsp\n";
         }
-            
-    } else {                                    // sinon, c'est un blockscope
+    }
+    else
+    { // sinon, c'est un blockscope
         // On laisse ce scope continue le offset de son parent
         offset = currentScope->getCurrentDeclOffset();
     }
 
-    SymbolTable* parentScope = currentScope;
+    SymbolTable *parentScope = currentScope;
     currentScope = new SymbolTable(offset);
     currentScope->setParent(parentScope);
 
@@ -107,24 +109,25 @@ antlrcpp::Any CodeGenVisitor::visitBlock(ifccParser::BlockContext *ctx)
 antlrcpp::Any CodeGenVisitor::visitDecl_stmt(ifccParser::Decl_stmtContext *ctx)
 {
     std::string varType = ctx->type()->getText();
-    currentTypeInMultiDeclaration = varType;
-    for (auto sdecl : ctx->sub_decl()) {
-        this->visit(sdecl);
+    for (auto sdecl : ctx->sub_decl())
+    {
+        visitSub_declWithType(sdecl, varType);
     }
 
     return 0;
 }
 
-antlrcpp::Any CodeGenVisitor::visitSub_decl(ifccParser::Sub_declContext *ctx) {
-    std::string varType = currentTypeInMultiDeclaration; 
+antlrcpp::Any CodeGenVisitor::visitSub_declWithType(ifccParser::Sub_declContext *ctx, std::string varType)
+{
     std::string varName = ctx->VAR()->getText();
 
     std::string varAddr;
-    if (currentScope->isGlobalScope()) { // si on est dans le scope global
+    if (currentScope->isGlobalScope())
+    { // si on est dans le scope global
         currentScope->addGlobalVariable(varName, varType);
 
         // on declare la variable
-        std::cout <<"    .globl " << varName << "\n";
+        std::cout << "    .globl " << varName << "\n";
         std::cout << varName << ":\n";
 
         if (ctx->expr()) {
@@ -140,7 +143,7 @@ antlrcpp::Any CodeGenVisitor::visitSub_decl(ifccParser::Sub_declContext *ctx) {
             std::cout << "    .zero 4\n";
         }
 
-    } else { // sinon, on est dans le scope d'une fonction ou d'un block
+    } else {
         int offset = currentScope->addLocalVariable(varName, varType);
         if (!ctx->expr()) return 0;  // si la variable n'est pas initialisée, on ne fait rien
 
@@ -152,24 +155,65 @@ antlrcpp::Any CodeGenVisitor::visitSub_decl(ifccParser::Sub_declContext *ctx) {
 }
 
 // Gestion de l'affectation à une variable déjà déclarée
-antlrcpp::Any CodeGenVisitor::visitAssign_stmt(ifccParser::Assign_stmtContext *ctx)
-{
+antlrcpp::Any CodeGenVisitor::visitAssign_stmt(ifccParser::Assign_stmtContext *ctx) {
     // Chercher la variable
     std::string varName = ctx->VAR()->getText();
     Parameters *var = currentScope->findVariable(varName);
-    if (var == nullptr) {
+    if (var == nullptr)
+    {
         std::cerr << "error: variable " << varName << " not declared.\n";
         exit(1);
     }
 
-    // Adresse de la variable
-    std::string varAddr = var->scopeType == ScopeType::GLOBAL 
-                                ? varName + "(%rip)" 
-                                : std::to_string(var->offset) + "(%rbp)";
+    std::string op = ctx->op_assign()->getText();
 
-    // Évaluer l'expression
-    auto expr = visit(ctx->expr());
-    setExprValueToRegister(expr, varAddr);
+    if (op == "+=" || op == "-=" || op == "*=" || op == "/=" || op == "%=") {
+        // TODO: Implementer les optimisations pour les constantes
+        if (var->scopeType == ScopeType::GLOBAL) {
+            std::cout << "    movl " << varName << "(%rip), %eax\n";
+        } else {
+            std::cout << "    movl " << var->offset << "(%rbp), %eax\n";
+        }
+        std::cout << "    pushq %rax\n";
+        auto expr = visit(ctx->expr());
+        if (expr.is<Constant>()) {
+            std::cout << "    movl $" << expr.as<Constant>().value << ", %eax\n";
+        }
+        std::cout << "    popq %rcx\n";
+
+        std::cout << "    movl %eax, %ebx\n"; 
+        std::cout << "    movl %ecx, %eax\n"; 
+        std::cout << "    movl %ebx, %ecx\n"; 
+        if (op == "+=") {
+            std::cout << "    addl %ecx, %eax\n";
+        } else if (op == "-=") {
+            std::cout << "    subl %ecx, %eax\n";
+        } else if (op == "*=") {
+            std::cout << "    imull %ecx, %eax\n";
+        } else if (op == "/=" || op == "%=") { 
+            std::cout << "    cltd\n";            
+            std::cout << "    idivl %ecx\n";      
+            if (op == "%=") {
+                std::cout << "    movl %edx, %eax\n"; 
+            }
+        }
+
+        if (var->scopeType == ScopeType::GLOBAL) {
+            std::cout << "    movl %eax, " << varName << "(%rip)\n";
+        } else {
+            std::cout << "    movl %eax, " << var->offset << "(%rbp)\n";
+        }
+    } else if (op == "=") {
+        // Adresse de la variable
+        std::string varAddr = var->scopeType == ScopeType::GLOBAL 
+        ? varName + "(%rip)" 
+        : std::to_string(var->offset) + "(%rbp)";
+
+        // Évaluer l'expression
+        auto expr = visit(ctx->expr());
+        setExprValueToRegister(expr, varAddr);
+    }
+
     return 0;
 }
 
@@ -566,13 +610,12 @@ antlrcpp::Any CodeGenVisitor::visitBitwiseXorExpression(ifccParser::BitwiseXorEx
     return 0;
 }
 
-
 antlrcpp::Any CodeGenVisitor::visitLogiqueParesseuxExpression(ifccParser::LogiqueParesseuxExpressionContext *ctx)
 {
     // TODO: Implementer les optimisations pour les constantes
     std::string op = ctx->op->getText();
-    std::string labelTrue = generateLabel(); 
-    std::string labelEnd = generateLabel();  
+    std::string labelTrue = generateLabel();
+    std::string labelEnd = generateLabel();
 
     if (op == "&&")
     {
@@ -625,7 +668,7 @@ antlrcpp::Any CodeGenVisitor::visitParenthesisExpression(ifccParser::Parenthesis
 
 std::string CodeGenVisitor::generateLabel()
 {
-    static int labelCounter = 0; 
+    static int labelCounter = 0;
     return ".L" + std::to_string(labelCounter++);
 }
 
@@ -634,14 +677,18 @@ antlrcpp::Any CodeGenVisitor::visitVariableExpression(ifccParser::VariableExpres
 {
     std::string varName = ctx->VAR()->getText();
     Parameters *var = currentScope->findVariable(varName);
-    if (var == nullptr) {
+    if (var == nullptr)
+    {
         std::cerr << "error: variable " << varName << " not declared\n";
         exit(1);
     }
 
-    if (var->scopeType == ScopeType::GLOBAL) {
+    if (var->scopeType == ScopeType::GLOBAL)
+    {
         std::cout << "    movl " << varName << "(%rip), %eax" << "\n";
-    } else {
+    }
+    else
+    {
         std::cout << "    movl " << var->offset << "(%rbp), %eax" << "\n";
     }
 
@@ -763,6 +810,47 @@ antlrcpp::Any CodeGenVisitor::visitFunctionCallExpression(ifccParser::FunctionCa
     std::cout << "    call " << funcName << "\n";
 
     // The function's return value (if any) will be in %eax.
+    return 0;
+}
+
+//Increment and Decrement
+antlrcpp::Any CodeGenVisitor::visitPostIncrementExpression(ifccParser::PostIncrementExpressionContext *ctx)
+{
+    std::string varName = ctx->VAR()->getText();
+    Parameters *var = currentScope->findVariable(varName);
+    if (var == nullptr) {
+        std::cerr << "error: variable " << varName << " not declared.\n";
+        exit(1);
+    }
+
+    if (var->scopeType == ScopeType::GLOBAL) {
+        std::cout << "    movl " << varName << "(%rip), %eax\n"; 
+        std::cout << "    addl $1, " << varName << "(%rip)\n"; 
+    } else {
+        std::cout << "    movl " << var->offset << "(%rbp), %eax\n"; 
+        std::cout << "    addl $1, " << var->offset << "(%rbp)\n"; 
+    }
+
+    return 0;
+}
+
+antlrcpp::Any CodeGenVisitor::visitPostDecrementExpression(ifccParser::PostDecrementExpressionContext *ctx)
+{
+    std::string varName = ctx->VAR()->getText();
+    Parameters *var = currentScope->findVariable(varName);
+    if (var == nullptr) {
+        std::cerr << "error: variable " << varName << " not declared.\n";
+        exit(1);
+    }
+
+    if (var->scopeType == ScopeType::GLOBAL) {
+        std::cout << "    movl " << varName << "(%rip), %eax\n"; 
+        std::cout << "    subl $1, " << varName << "(%rip)\n";  
+    } else {
+        std::cout << "    movl " << var->offset << "(%rbp), %eax\n";
+        std::cout << "    subl $1, " << var->offset << "(%rbp)\n";  
+    }
+
     return 0;
 }
 

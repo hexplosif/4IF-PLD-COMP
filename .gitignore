@@ -15,5 +15,7 @@ ifcc-test-output/*
 
 .vscode/
 .antlr/
+.clangd
+.clang-format
 
 son_note.md
