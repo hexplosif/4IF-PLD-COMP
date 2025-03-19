@@ -18,6 +18,8 @@ private:
     bool isExprIsConstant(ifccParser::ExprContext *ctx);
     int getConstantValueFromExpr(ifccParser::ExprContext *ctx);
 
+    std::string generateLabel(); 
+
 public:
     virtual antlrcpp::Any visitProg(ifccParser::ProgContext *ctx) override;
 
