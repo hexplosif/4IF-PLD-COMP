@@ -81,3 +81,5 @@ Pour lancer les tests :
 ```sh
 python3 ifcc-test.py testfiles/
 ```
+
+Pour lancer le test 43 `43_getchar`, il faut rentrer 2 caractères car il y a deux getchar() (un pour gcc et un pour ifcc)
