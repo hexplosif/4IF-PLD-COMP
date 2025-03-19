@@ -3,22 +3,24 @@
 #include <iostream>
 #include <map>
 
-enum VarType {
+enum SymbolType
+{
     INT,
     CHAR
 };
 
-enum ScopeType {
+enum SymbolScopeType
+{
     GLOBAL,
     FUNCTION_PARAMS,
     BLOCK
 };
 
-struct Parameters
+struct SymbolParameters
 {
-    VarType type;
+    SymbolType type;
     int offset;
-    ScopeType scopeType;
+    SymbolScopeType scopeType;
 };
 
 class SymbolTable
@@ -27,28 +29,36 @@ class SymbolTable
 // - chaque table des symboles a un pointeur vers la table des symboles parente (SymbolTable *parent)
 //    -> c'est le scope de la block extérieur plus proche
 {
-    public:
-        SymbolTable( int initialOffset );
-        int addLocalVariable(std::string name, std::string type); //return offset
-        void addGlobalVariable(std::string name, std::string type);
+  public:
+    SymbolTable(int initialOffset);
+    int addLocalVariable(std::string name, std::string type); // return offset
+    void addGlobalVariable(std::string name, std::string type);
 
+    SymbolParameters *findVariable(std::string name);          // find all var can see in the scope
+    SymbolParameters *findVariableThisScope(std::string name); // find only var in the scope
 
-        Parameters* findVariable(std::string name); // find all var can see in the scope
-        Parameters* findVariableThisScope(std::string name); //find only var in the scope
+    void synchronize(SymbolTable *symbolTable); // synchronise les offsets des variables
 
-        void synchronize(SymbolTable *symbolTable); // synchronise les offsets des variables
+    bool isGlobalScope();
 
-        bool isGlobalScope();
+    void setParent(SymbolTable *parent)
+    {
+        this->parent = parent;
+    }
+    SymbolTable *getParent()
+    {
+        return parent;
+    }
+    int getCurrentDeclOffset()
+    {
+        return currentDeclOffset;
+    }
 
-        void setParent(SymbolTable *parent) { this->parent = parent; }
-        SymbolTable *getParent() { return parent; }
-        int getCurrentDeclOffset() { return currentDeclOffset; }
+  private:
+    std::map<std::string, SymbolParameters> table;
+    int currentDeclOffset = 0;
 
-    private:
-        std::map<std::string, Parameters> table;
-        int currentDeclOffset = 0;
+    SymbolTable *parent = nullptr;
 
-        SymbolTable *parent = nullptr;
-
-        VarType getType(std::string strType );
+    SymbolType getType(std::string strType);
 };

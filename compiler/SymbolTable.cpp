@@ -2,7 +2,7 @@
 
 SymbolTable::SymbolTable(int initialOffset)
 {
-    table = std::map<std::string, Parameters>();
+    table = std::map<std::string, SymbolParameters>();
     parent = nullptr;
     this->currentDeclOffset = initialOffset;
 }
@@ -11,7 +11,7 @@ int SymbolTable::addLocalVariable(std::string name, std::string type)
 {
     if (findVariableThisScope(name) == nullptr)
     {
-        Parameters p = {getType(type), currentDeclOffset, ScopeType::BLOCK};
+        SymbolParameters p = {getType(type), currentDeclOffset, SymbolScopeType::BLOCK};
         table[name] = p;
         currentDeclOffset += 4;
         return currentDeclOffset - 4;
@@ -27,7 +27,7 @@ void SymbolTable::addGlobalVariable(std::string name, std::string type)
 {
     if (findVariableThisScope(name) == nullptr)
     {
-        Parameters p = {getType(type), currentDeclOffset, ScopeType::GLOBAL};
+        SymbolParameters p = {getType(type), currentDeclOffset, SymbolScopeType::GLOBAL};
         table[name] = p;
     }
     else
@@ -37,7 +37,7 @@ void SymbolTable::addGlobalVariable(std::string name, std::string type)
     }
 }
 
-Parameters *SymbolTable::findVariable(std::string name)
+SymbolParameters *SymbolTable::findVariable(std::string name)
 {
     SymbolTable *current = this;
     while (current != nullptr)
@@ -51,7 +51,7 @@ Parameters *SymbolTable::findVariable(std::string name)
     return nullptr;
 }
 
-Parameters *SymbolTable::findVariableThisScope(std::string name)
+SymbolParameters *SymbolTable::findVariableThisScope(std::string name)
 {
     if (table.find(name) != table.end())
     {
@@ -70,12 +70,12 @@ bool SymbolTable::isGlobalScope()
     return parent == nullptr;
 }
 
-VarType SymbolTable::getType(std::string strType)
+SymbolType SymbolTable::getType(std::string strType)
 {
     if (strType == "int")
-        return VarType::INT;
+        return SymbolType::INT;
     if (strType == "char")
-        return VarType::CHAR;
+        return SymbolType::CHAR;
     std::cerr << "error: unknown type " << strType << std::endl;
     exit(1);
 }

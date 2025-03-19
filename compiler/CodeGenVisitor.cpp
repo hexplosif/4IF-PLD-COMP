@@ -167,7 +167,7 @@ antlrcpp::Any CodeGenVisitor::visitSub_declWithType(ifccParser::Sub_declContext 
 antlrcpp::Any CodeGenVisitor::visitAssign_stmt(ifccParser::Assign_stmtContext *ctx)
 {
     std::string varName = ctx->VAR()->getText();
-    Parameters *var = currentScope->findVariable(varName);
+    SymbolParameters *var = currentScope->findVariable(varName);
     if (var == nullptr)
     {
         std::cerr << "error: variable " << varName << " not declared." << std::endl;
@@ -178,7 +178,7 @@ antlrcpp::Any CodeGenVisitor::visitAssign_stmt(ifccParser::Assign_stmtContext *c
 
     if (op == "+=" || op == "-=" || op == "*=" || op == "/=" || op == "%=")
     {
-        if (var->scopeType == ScopeType::GLOBAL)
+        if (var->scopeType == SymbolScopeType::GLOBAL)
         {
             std::cout << "    movl " << varName << "(%rip), %eax" << std::endl;
         }
@@ -215,7 +215,7 @@ antlrcpp::Any CodeGenVisitor::visitAssign_stmt(ifccParser::Assign_stmtContext *c
             }
         }
 
-        if (var->scopeType == ScopeType::GLOBAL)
+        if (var->scopeType == SymbolScopeType::GLOBAL)
         {
             std::cout << "    movl %eax, " << varName << "(%rip)" << std::endl;
         }
@@ -227,7 +227,7 @@ antlrcpp::Any CodeGenVisitor::visitAssign_stmt(ifccParser::Assign_stmtContext *c
     else if (op == "=")
     {
         visit(ctx->expr());
-        if (var->scopeType == ScopeType::GLOBAL)
+        if (var->scopeType == SymbolScopeType::GLOBAL)
         {
             std::cout << "    movl %eax, " << varName << "(%rip)" << std::endl;
         }
@@ -414,14 +414,14 @@ std::string CodeGenVisitor::generateLabel()
 antlrcpp::Any CodeGenVisitor::visitVariableExpression(ifccParser::VariableExpressionContext *ctx)
 {
     std::string varName = ctx->VAR()->getText();
-    Parameters *var = currentScope->findVariable(varName);
+    SymbolParameters *var = currentScope->findVariable(varName);
     if (var == nullptr)
     {
         std::cerr << "error: variable " << varName << " not declared" << std::endl;
         exit(1);
     }
 
-    if (var->scopeType == ScopeType::GLOBAL)
+    if (var->scopeType == SymbolScopeType::GLOBAL)
     {
         std::cout << "    movl " << varName << "(%rip), %eax" << std::endl;
     }
@@ -546,14 +546,14 @@ antlrcpp::Any CodeGenVisitor::visitFunctionCallExpression(ifccParser::FunctionCa
 antlrcpp::Any CodeGenVisitor::visitPostIncrementExpression(ifccParser::PostIncrementExpressionContext *ctx)
 {
     std::string varName = ctx->VAR()->getText();
-    Parameters *var = currentScope->findVariable(varName);
+    SymbolParameters *var = currentScope->findVariable(varName);
     if (var == nullptr)
     {
         std::cerr << "error: variable " << varName << " not declared." << std::endl;
         exit(1);
     }
 
-    if (var->scopeType == ScopeType::GLOBAL)
+    if (var->scopeType == SymbolScopeType::GLOBAL)
     {
         std::cout << "    movl " << varName << "(%rip), %eax" << std::endl;
         std::cout << "    addl $1, " << varName << "(%rip)" << std::endl;
@@ -570,14 +570,14 @@ antlrcpp::Any CodeGenVisitor::visitPostIncrementExpression(ifccParser::PostIncre
 antlrcpp::Any CodeGenVisitor::visitPostDecrementExpression(ifccParser::PostDecrementExpressionContext *ctx)
 {
     std::string varName = ctx->VAR()->getText();
-    Parameters *var = currentScope->findVariable(varName);
+    SymbolParameters *var = currentScope->findVariable(varName);
     if (var == nullptr)
     {
         std::cerr << "error: variable " << varName << " not declared." << std::endl;
         exit(1);
     }
 
-    if (var->scopeType == ScopeType::GLOBAL)
+    if (var->scopeType == SymbolScopeType::GLOBAL)
     {
         std::cout << "    movl " << varName << "(%rip), %eax" << std::endl;
         std::cout << "    subl $1, " << varName << "(%rip)" << std::endl;
