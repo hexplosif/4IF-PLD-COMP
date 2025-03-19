@@ -28,7 +28,7 @@ antlrcpp::Any CodeGenVisitor::visitProg(ifccParser::ProgContext *ctx)
 
     if (!ctx->decl_stmt().empty())
     { // si on a des variables globales
-        std::cout << "    .data\n";
+        std::cout << "    .data" << std::endl;
     }
 
     // Visiter tous decl_stmt
@@ -39,23 +39,23 @@ antlrcpp::Any CodeGenVisitor::visitProg(ifccParser::ProgContext *ctx)
 
     // Prologue
 #ifdef __APPLE__
-    std::cout << ".globl _main\n";
-    std::cout << "_main:\n";
+    std::cout << ".globl _main" << std::endl;
+    std::cout << "_main:" << std::endl;
 #else
-    std::cout << "    .text\n";
-    std::cout << "    .globl main\n";
-    std::cout << "main:\n";
+    std::cout << "    .text" << std::endl;
+    std::cout << "    .globl main" << std::endl;
+    std::cout << "main:" << std::endl;
 #endif
-    std::cout << "    pushq %rbp\n";
-    std::cout << "    movq %rsp, %rbp\n";
+    std::cout << "    pushq %rbp" << std::endl;
+    std::cout << "    movq %rsp, %rbp" << std::endl;
 
     visit(ctx->block());
 
     // Épilogue
-    std::cout << ".Lepilogue:\n";         // epilogue label
-    std::cout << "    movq %rbp, %rsp\n"; // Restaurer rsp
-    std::cout << "    popq %rbp\n";
-    std::cout << "    ret\n";
+    std::cout << ".Lepilogue:" << std::endl;         // epilogue label
+    std::cout << "    movq %rbp, %rsp" << std::endl; // Restaurer rsp
+    std::cout << "    popq %rbp" << std::endl;
+    std::cout << "    ret" << std::endl;
 
     return 0;
 }
@@ -76,7 +76,7 @@ antlrcpp::Any CodeGenVisitor::visitBlock(ifccParser::BlockContext *ctx)
         stackSize = (stackSize + 15) & ~15;
         if (stackSize > 0)
         {
-            std::cout << "    subq $" << stackSize << ", %rsp\n";
+            std::cout << "    subq $" << stackSize << ", %rsp" << std::endl;
         }
     }
     else
@@ -129,22 +129,22 @@ antlrcpp::Any CodeGenVisitor::visitSub_declWithType(ifccParser::Sub_declContext 
         // On vérifie si la variable est initialisée avec une constante
         if (ctx->expr() && !isExprIsConstant(ctx->expr()))
         {
-            std::cerr << "error: global variable must be initialized with a constant\n";
+            std::cerr << "error: global variable must be initialized with a constant" << std::endl;
             exit(1);
         }
 
         // on declare la variable
-        std::cout << "    .globl " << varName << "\n";
-        std::cout << varName << ":\n";
+        std::cout << "    .globl " << varName << std::endl;
+        std::cout << varName << ":" << std::endl;
 
         if (ctx->expr())
         {
             int value = getConstantValueFromExpr(ctx->expr());
-            std::cout << "    .long " << value << "\n";
+            std::cout << "    .long " << value << std::endl;
         }
         else
         {
-            std::cout << "    .zero 4\n";
+            std::cout << "    .zero 4" << std::endl;
         }
     }
     else
@@ -156,7 +156,7 @@ antlrcpp::Any CodeGenVisitor::visitSub_declWithType(ifccParser::Sub_declContext 
         if (ctx->expr())
         {
             visit(ctx->expr());
-            std::cout << "    movl %eax, " << offset << "(%rbp)" << "\n";
+            std::cout << "    movl %eax, " << offset << "(%rbp)" << std::endl;
         }
     }
 
@@ -170,50 +170,70 @@ antlrcpp::Any CodeGenVisitor::visitAssign_stmt(ifccParser::Assign_stmtContext *c
     Parameters *var = currentScope->findVariable(varName);
     if (var == nullptr)
     {
-        std::cerr << "error: variable " << varName << " not declared.\n";
+        std::cerr << "error: variable " << varName << " not declared." << std::endl;
         exit(1);
     }
 
     std::string op = ctx->op_assign()->getText();
 
-    if (op == "+=" || op == "-=" || op == "*=" || op == "/=" || op == "%=") {
-        if (var->scopeType == ScopeType::GLOBAL) {
-            std::cout << "    movl " << varName << "(%rip), %eax\n";
-        } else {
-            std::cout << "    movl " << var->offset << "(%rbp), %eax\n";
+    if (op == "+=" || op == "-=" || op == "*=" || op == "/=" || op == "%=")
+    {
+        if (var->scopeType == ScopeType::GLOBAL)
+        {
+            std::cout << "    movl " << varName << "(%rip), %eax" << std::endl;
         }
-        std::cout << "    pushq %rax\n";
+        else
+        {
+            std::cout << "    movl " << var->offset << "(%rbp), %eax" << std::endl;
+        }
+        std::cout << "    pushq %rax" << std::endl;
         visit(ctx->expr());
-        std::cout << "    popq %rcx\n";
+        std::cout << "    popq %rcx" << std::endl;
 
-        std::cout << "    movl %eax, %ebx\n"; 
-        std::cout << "    movl %ecx, %eax\n"; 
-        std::cout << "    movl %ebx, %ecx\n"; 
-        if (op == "+=") {
-            std::cout << "    addl %ecx, %eax\n";
-        } else if (op == "-=") {
-            std::cout << "    subl %ecx, %eax\n";
-        } else if (op == "*=") {
-            std::cout << "    imull %ecx, %eax\n";
-        } else if (op == "/=" || op == "%=") { 
-            std::cout << "    cltd\n";            
-            std::cout << "    idivl %ecx\n";      
-            if (op == "%=") {
-                std::cout << "    movl %edx, %eax\n"; 
+        std::cout << "    movl %eax, %ebx" << std::endl;
+        std::cout << "    movl %ecx, %eax" << std::endl;
+        std::cout << "    movl %ebx, %ecx" << std::endl;
+        if (op == "+=")
+        {
+            std::cout << "    addl %ecx, %eax" << std::endl;
+        }
+        else if (op == "-=")
+        {
+            std::cout << "    subl %ecx, %eax" << std::endl;
+        }
+        else if (op == "*=")
+        {
+            std::cout << "    imull %ecx, %eax" << std::endl;
+        }
+        else if (op == "/=" || op == "%=")
+        {
+            std::cout << "    cltd" << std::endl;
+            std::cout << "    idivl %ecx" << std::endl;
+            if (op == "%=")
+            {
+                std::cout << "    movl %edx, %eax" << std::endl;
             }
         }
 
-        if (var->scopeType == ScopeType::GLOBAL) {
-            std::cout << "    movl %eax, " << varName << "(%rip)\n";
-        } else {
-            std::cout << "    movl %eax, " << var->offset << "(%rbp)\n";
+        if (var->scopeType == ScopeType::GLOBAL)
+        {
+            std::cout << "    movl %eax, " << varName << "(%rip)" << std::endl;
         }
-    } else if (op == "=") {
+        else
+        {
+            std::cout << "    movl %eax, " << var->offset << "(%rbp)" << std::endl;
+        }
+    }
+    else if (op == "=")
+    {
         visit(ctx->expr());
-        if (var->scopeType == ScopeType::GLOBAL) {
-            std::cout << "    movl %eax, " << varName << "(%rip)\n";
-        } else {
-            std::cout << "    movl %eax, " << var->offset << "(%rbp)\n";
+        if (var->scopeType == ScopeType::GLOBAL)
+        {
+            std::cout << "    movl %eax, " << varName << "(%rip)" << std::endl;
+        }
+        else
+        {
+            std::cout << "    movl %eax, " << var->offset << "(%rbp)" << std::endl;
         }
     }
 
@@ -223,7 +243,7 @@ antlrcpp::Any CodeGenVisitor::visitAssign_stmt(ifccParser::Assign_stmtContext *c
 antlrcpp::Any CodeGenVisitor::visitReturn_stmt(ifccParser::Return_stmtContext *ctx)
 {
     visit(ctx->expr());
-    std::cout << "    jmp .Lepilogue\n"; // Aller à l'épilogue
+    std::cout << "    jmp .Lepilogue" << std::endl; // Aller à l'épilogue
     return 0;
 }
 
@@ -237,13 +257,13 @@ antlrcpp::Any CodeGenVisitor::visitUnaryLogicalNotExpression(ifccParser::UnaryLo
     std::string op = ctx->op->getText();
     if (op == "-")
     {
-        std::cout << "    negl %eax\n"; // Négation arithmétique
+        std::cout << "    negl %eax" << std::endl; // Négation arithmétique
     }
     else if (op == "!")
     {
-        std::cout << "    cmpl $0, %eax\n"; // Comparer avec 0
-        std::cout << "    sete %al\n";      // Mettre %al à 1 si %eax est 0
-        std::cout << "    movzbl %al, %eax\n";
+        std::cout << "    cmpl $0, %eax" << std::endl; // Comparer avec 0
+        std::cout << "    sete %al" << std::endl;      // Mettre %al à 1 si %eax est 0
+        std::cout << "    movzbl %al, %eax" << std::endl;
     }
     return 0;
 }
@@ -252,20 +272,20 @@ antlrcpp::Any CodeGenVisitor::visitAddSubExpression(ifccParser::AddSubExpression
 {
     if (ctx->op->getText() == "+")
     {
-        visit(ctx->expr(0));                  // Évalue le premier opérande
-        std::cout << "    pushq %rax\n";      // Sauvegarde du résultat
-        visit(ctx->expr(1));                  // Évalue le second opérande
-        std::cout << "    popq %rcx\n";       // Récupère le premier opérande
-        std::cout << "    addl %ecx, %eax\n"; // Additionne
+        visit(ctx->expr(0));                             // Évalue le premier opérande
+        std::cout << "    pushq %rax" << std::endl;      // Sauvegarde du résultat
+        visit(ctx->expr(1));                             // Évalue le second opérande
+        std::cout << "    popq %rcx" << std::endl;       // Récupère le premier opérande
+        std::cout << "    addl %ecx, %eax" << std::endl; // Additionne
     }
     else if (ctx->op->getText() == "-")
     {
         visit(ctx->expr(0));
-        std::cout << "    pushq %rax\n";
+        std::cout << "    pushq %rax" << std::endl;
         visit(ctx->expr(1));
-        std::cout << "    popq %rcx\n";
-        std::cout << "    subl %eax, %ecx\n";
-        std::cout << "    movl %ecx, %eax\n";
+        std::cout << "    popq %rcx" << std::endl;
+        std::cout << "    subl %eax, %ecx" << std::endl;
+        std::cout << "    movl %ecx, %eax" << std::endl;
     }
     return 0;
 }
@@ -276,8 +296,8 @@ antlrcpp::Any CodeGenVisitor::visitMulDivExpression(ifccParser::MulDivExpression
     std::string op = ctx->OPM()->getText();
 
     // Evaluer a (opérande gauche)
-    visit(ctx->expr(0));             // a dans %eax
-    std::cout << "    pushq %rax\n"; // Empiler a
+    visit(ctx->expr(0));                        // a dans %eax
+    std::cout << "    pushq %rax" << std::endl; // Empiler a
 
     // Evaluer b (opérande droite)
     visit(ctx->expr(1)); // b dans %eax
@@ -285,21 +305,21 @@ antlrcpp::Any CodeGenVisitor::visitMulDivExpression(ifccParser::MulDivExpression
     if (op == "*")
     {
         // Dépiler a dans %rcx
-        std::cout << "    popq %rcx\n";
-        std::cout << "    imull %ecx, %eax\n";
+        std::cout << "    popq %rcx" << std::endl;
+        std::cout << "    imull %ecx, %eax" << std::endl;
     }
     else if (op == "/" || op == "%")
     {
-        std::cout << "    pushq %rax\n"; // Empiler b
-        std::cout << "    popq %rcx\n";  // Dépiler b dans %rcx
-        std::cout << "    popq %rax\n";  // Dépiler a dans %rax
+        std::cout << "    pushq %rax" << std::endl; // Empiler b
+        std::cout << "    popq %rcx" << std::endl;  // Dépiler b dans %rcx
+        std::cout << "    popq %rax" << std::endl;  // Dépiler a dans %rax
 
-        std::cout << "    cltd\n";       // sign extend %eax to %edx:%eax
-        std::cout << "    idivl %ecx\n"; // %eax = a /b , %edx = a % b
+        std::cout << "    cltd" << std::endl;       // sign extend %eax to %edx:%eax
+        std::cout << "    idivl %ecx" << std::endl; // %eax = a /b , %edx = a % b
 
         if (op == "%")
         {
-            std::cout << "    movl %edx, %eax\n"; // %eax = a % b
+            std::cout << "    movl %edx, %eax" << std::endl; // %eax = a % b
         }
     }
 
@@ -310,10 +330,10 @@ antlrcpp::Any CodeGenVisitor::visitMulDivExpression(ifccParser::MulDivExpression
 antlrcpp::Any CodeGenVisitor::visitBitwiseAndExpression(ifccParser::BitwiseAndExpressionContext *ctx)
 {
     visit(ctx->expr(0));
-    std::cout << "    pushq %rax\n";
+    std::cout << "    pushq %rax" << std::endl;
     visit(ctx->expr(1));
-    std::cout << "    popq %rcx\n";
-    std::cout << "    andl %ecx, %eax\n";
+    std::cout << "    popq %rcx" << std::endl;
+    std::cout << "    andl %ecx, %eax" << std::endl;
     return 0;
 }
 
@@ -321,10 +341,10 @@ antlrcpp::Any CodeGenVisitor::visitBitwiseAndExpression(ifccParser::BitwiseAndEx
 antlrcpp::Any CodeGenVisitor::visitBitwiseOrExpression(ifccParser::BitwiseOrExpressionContext *ctx)
 {
     visit(ctx->expr(0));
-    std::cout << "    pushq %rax\n";
+    std::cout << "    pushq %rax" << std::endl;
     visit(ctx->expr(1));
-    std::cout << "    popq %rcx\n";
-    std::cout << "    orl %ecx, %eax\n";
+    std::cout << "    popq %rcx" << std::endl;
+    std::cout << "    orl %ecx, %eax" << std::endl;
     return 0;
 }
 
@@ -332,10 +352,10 @@ antlrcpp::Any CodeGenVisitor::visitBitwiseOrExpression(ifccParser::BitwiseOrExpr
 antlrcpp::Any CodeGenVisitor::visitBitwiseXorExpression(ifccParser::BitwiseXorExpressionContext *ctx)
 {
     visit(ctx->expr(0));
-    std::cout << "    pushq %rax\n";
+    std::cout << "    pushq %rax" << std::endl;
     visit(ctx->expr(1));
-    std::cout << "    popq %rcx\n";
-    std::cout << "    xorl %ecx, %eax\n";
+    std::cout << "    popq %rcx" << std::endl;
+    std::cout << "    xorl %ecx, %eax" << std::endl;
     return 0;
 }
 
@@ -348,37 +368,37 @@ antlrcpp::Any CodeGenVisitor::visitLogiqueParesseuxExpression(ifccParser::Logiqu
     if (op == "&&")
     {
         visit(ctx->expr(0)); // Évaluer le premier opérande
-        std::cout << "    cmpl $0, %eax\n";
-        std::cout << "    je " << labelEnd << "\n"; // Sauter à la fin si faux
+        std::cout << "    cmpl $0, %eax" << std::endl;
+        std::cout << "    je " << labelEnd << std::endl; // Sauter à la fin si faux
 
         visit(ctx->expr(1)); // Évaluer le deuxième opérande
-        std::cout << "    cmpl $0, %eax\n";
-        std::cout << "    je " << labelEnd << "\n"; // Sauter à la fin si faux
+        std::cout << "    cmpl $0, %eax" << std::endl;
+        std::cout << "    je " << labelEnd << std::endl; // Sauter à la fin si faux
 
-        std::cout << labelTrue << ":\n";
-        std::cout << "    movl $1, %eax\n"; // Les deux opérandes sont vrais
-        std::cout << "    jmp " << labelEnd << "\n";
+        std::cout << labelTrue << ":" << std::endl;
+        std::cout << "    movl $1, %eax" << std::endl; // Les deux opérandes sont vrais
+        std::cout << "    jmp " << labelEnd << std::endl;
 
-        std::cout << labelEnd << ":\n";
-        std::cout << "    movl $0, %eax\n"; // Au moins un opérande est faux
+        std::cout << labelEnd << ":" << std::endl;
+        std::cout << "    movl $0, %eax" << std::endl; // Au moins un opérande est faux
     }
     else if (op == "||")
     {
         visit(ctx->expr(0)); // Évaluer le premier opérande
-        std::cout << "    cmpl $0, %eax\n";
-        std::cout << "    jne " << labelTrue << "\n"; // Sauter à vrai si non zéro
+        std::cout << "    cmpl $0, %eax" << std::endl;
+        std::cout << "    jne " << labelTrue << std::endl; // Sauter à vrai si non zéro
 
         visit(ctx->expr(1)); // Évaluer le deuxième opérande
-        std::cout << "    cmpl $0, %eax\n";
-        std::cout << "    jne " << labelTrue << "\n"; // Sauter à vrai si non zéro
+        std::cout << "    cmpl $0, %eax" << std::endl;
+        std::cout << "    jne " << labelTrue << std::endl; // Sauter à vrai si non zéro
 
-        std::cout << "    movl $0, %eax\n"; // Les deux opérandes sont faux
-        std::cout << "    jmp " << labelEnd << "\n";
+        std::cout << "    movl $0, %eax" << std::endl; // Les deux opérandes sont faux
+        std::cout << "    jmp " << labelEnd << std::endl;
 
-        std::cout << labelTrue << ":\n";
-        std::cout << "    movl $1, %eax\n"; // Au moins un opérande est vrai
+        std::cout << labelTrue << ":" << std::endl;
+        std::cout << "    movl $1, %eax" << std::endl; // Au moins un opérande est vrai
 
-        std::cout << labelEnd << ":\n";
+        std::cout << labelEnd << ":" << std::endl;
     }
 
     return 0;
@@ -397,17 +417,17 @@ antlrcpp::Any CodeGenVisitor::visitVariableExpression(ifccParser::VariableExpres
     Parameters *var = currentScope->findVariable(varName);
     if (var == nullptr)
     {
-        std::cerr << "error: variable " << varName << " not declared\n";
+        std::cerr << "error: variable " << varName << " not declared" << std::endl;
         exit(1);
     }
 
     if (var->scopeType == ScopeType::GLOBAL)
     {
-        std::cout << "    movl " << varName << "(%rip), %eax" << "\n";
+        std::cout << "    movl " << varName << "(%rip), %eax" << std::endl;
     }
     else
     {
-        std::cout << "    movl " << var->offset << "(%rbp), %eax" << "\n";
+        std::cout << "    movl " << var->offset << "(%rbp), %eax" << std::endl;
     }
 
     return 0;
@@ -417,7 +437,7 @@ antlrcpp::Any CodeGenVisitor::visitVariableExpression(ifccParser::VariableExpres
 antlrcpp::Any CodeGenVisitor::visitConstantExpression(ifccParser::ConstantExpressionContext *ctx)
 {
     int value = std::stoi(ctx->CONST()->getText());
-    std::cout << "    movl $" << value << ", %eax" << "\n";
+    std::cout << "    movl $" << value << ", %eax" << std::endl;
     return 0;
 }
 
@@ -425,7 +445,7 @@ antlrcpp::Any CodeGenVisitor::visitConstantCharExpression(ifccParser::ConstantCh
 {
     std::string value = ctx->CONST_CHAR()->getText().substr(1, 1);
     int convertValue = value[0];
-    std::cout << "    movl $" << convertValue << ", %eax" << "\n";
+    std::cout << "    movl $" << convertValue << ", %eax" << std::endl;
     return 0;
 }
 
@@ -434,37 +454,37 @@ antlrcpp::Any CodeGenVisitor::visitConstantCharExpression(ifccParser::ConstantCh
 antlrcpp::Any CodeGenVisitor::visitComparisonExpression(ifccParser::ComparisonExpressionContext *ctx)
 {
     visit(ctx->expr(0)); // Évalue l'opérande gauche
-    std::cout << "    pushq %rax\n";
+    std::cout << "    pushq %rax" << std::endl;
     visit(ctx->expr(1)); // Évalue l'opérande droite
-    std::cout << "    popq %rcx\n";
-    std::cout << "    cmpl %eax, %ecx\n";
+    std::cout << "    popq %rcx" << std::endl;
+    std::cout << "    cmpl %eax, %ecx" << std::endl;
 
     std::string op = ctx->op->getText();
     if (op == "==")
     {
-        std::cout << "    sete %al\n";
+        std::cout << "    sete %al" << std::endl;
     }
     else if (op == "!=")
     {
-        std::cout << "    setne %al\n";
+        std::cout << "    setne %al" << std::endl;
     }
     else if (op == "<")
     {
-        std::cout << "    setl %al\n";
+        std::cout << "    setl %al" << std::endl;
     }
     else if (op == ">")
     {
-        std::cout << "    setg %al\n";
+        std::cout << "    setg %al" << std::endl;
     }
     else if (op == "<=")
     {
-        std::cout << "    setle %al\n";
+        std::cout << "    setle %al" << std::endl;
     }
     else if (op == ">=")
     {
-        std::cout << "    setge %al\n";
+        std::cout << "    setge %al" << std::endl;
     }
-    std::cout << "    movzbl %al, %eax\n"; // Conversion en entier 32 bits
+    std::cout << "    movzbl %al, %eax" << std::endl; // Conversion en entier 32 bits
     return 0;
 }
 
@@ -494,50 +514,54 @@ antlrcpp::Any CodeGenVisitor::visitFunctionCallExpression(ifccParser::FunctionCa
         switch (i)
         {
         case 0:
-            std::cout << "    movl %eax, %edi\n";
+            std::cout << "    movl %eax, %edi" << std::endl;
             break;
         case 1:
-            std::cout << "    movl %eax, %esi\n";
+            std::cout << "    movl %eax, %esi" << std::endl;
             break;
         case 2:
-            std::cout << "    movl %eax, %edx\n";
+            std::cout << "    movl %eax, %edx" << std::endl;
             break;
         case 3:
-            std::cout << "    movl %eax, %ecx\n";
+            std::cout << "    movl %eax, %ecx" << std::endl;
             break;
         case 4:
-            std::cout << "    movl %eax, %r8d\n";
+            std::cout << "    movl %eax, %r8d" << std::endl;
             break;
         case 5:
-            std::cout << "    movl %eax, %r9d\n";
+            std::cout << "    movl %eax, %r9d" << std::endl;
             break;
         }
     }
 
     // Finally, generate the call instruction
-    std::cout << "    call " << funcName << "\n";
+    std::cout << "    call " << funcName << std::endl;
 
     // The function's return value (if any) will be in %eax.
     return 0;
 }
 
-//Increment and Decrement
+// Increment and Decrement
 
 antlrcpp::Any CodeGenVisitor::visitPostIncrementExpression(ifccParser::PostIncrementExpressionContext *ctx)
 {
     std::string varName = ctx->VAR()->getText();
     Parameters *var = currentScope->findVariable(varName);
-    if (var == nullptr) {
-        std::cerr << "error: variable " << varName << " not declared.\n";
+    if (var == nullptr)
+    {
+        std::cerr << "error: variable " << varName << " not declared." << std::endl;
         exit(1);
     }
 
-    if (var->scopeType == ScopeType::GLOBAL) {
-        std::cout << "    movl " << varName << "(%rip), %eax\n"; 
-        std::cout << "    addl $1, " << varName << "(%rip)\n"; 
-    } else {
-        std::cout << "    movl " << var->offset << "(%rbp), %eax\n"; 
-        std::cout << "    addl $1, " << var->offset << "(%rbp)\n"; 
+    if (var->scopeType == ScopeType::GLOBAL)
+    {
+        std::cout << "    movl " << varName << "(%rip), %eax" << std::endl;
+        std::cout << "    addl $1, " << varName << "(%rip)" << std::endl;
+    }
+    else
+    {
+        std::cout << "    movl " << var->offset << "(%rbp), %eax" << std::endl;
+        std::cout << "    addl $1, " << var->offset << "(%rbp)" << std::endl;
     }
 
     return 0;
@@ -547,17 +571,21 @@ antlrcpp::Any CodeGenVisitor::visitPostDecrementExpression(ifccParser::PostDecre
 {
     std::string varName = ctx->VAR()->getText();
     Parameters *var = currentScope->findVariable(varName);
-    if (var == nullptr) {
-        std::cerr << "error: variable " << varName << " not declared.\n";
+    if (var == nullptr)
+    {
+        std::cerr << "error: variable " << varName << " not declared." << std::endl;
         exit(1);
     }
 
-    if (var->scopeType == ScopeType::GLOBAL) {
-        std::cout << "    movl " << varName << "(%rip), %eax\n"; 
-        std::cout << "    subl $1, " << varName << "(%rip)\n";  
-    } else {
-        std::cout << "    movl " << var->offset << "(%rbp), %eax\n";
-        std::cout << "    subl $1, " << var->offset << "(%rbp)\n";  
+    if (var->scopeType == ScopeType::GLOBAL)
+    {
+        std::cout << "    movl " << varName << "(%rip), %eax" << std::endl;
+        std::cout << "    subl $1, " << varName << "(%rip)" << std::endl;
+    }
+    else
+    {
+        std::cout << "    movl " << var->offset << "(%rbp), %eax" << std::endl;
+        std::cout << "    subl $1, " << var->offset << "(%rbp)" << std::endl;
     }
 
     return 0;
