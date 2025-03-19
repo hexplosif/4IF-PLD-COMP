@@ -7,7 +7,7 @@ SymbolTable::SymbolTable( int initialOffset ) {
 }
 
 int SymbolTable::addLocalVariable(std::string name, std::string type) {
-    if (findVariable(name) == nullptr) {
+    if (findVariableThisScope(name) == nullptr) {
         Parameters p = { getType(type) , currentDeclOffset, ScopeType::BLOCK };
         table[name] = p;
         currentDeclOffset += 4;
@@ -19,7 +19,7 @@ int SymbolTable::addLocalVariable(std::string name, std::string type) {
 }
 
 void SymbolTable::addGlobalVariable(std::string name, std::string type) {
-    if (findVariable(name) == nullptr) {
+    if (findVariableThisScope(name) == nullptr) {
         Parameters p = { getType(type) , currentDeclOffset, ScopeType::GLOBAL };
         table[name] = p; 
     } else {
