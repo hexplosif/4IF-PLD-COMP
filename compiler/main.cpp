@@ -1,12 +1,12 @@
-#include <iostream>
-#include <fstream>
-#include <sstream>
 #include <cstdlib>
+#include <fstream>
+#include <iostream>
+#include <sstream>
 
 #include "antlr4-runtime.h"
+#include "generated/ifccBaseVisitor.h"
 #include "generated/ifccLexer.h"
 #include "generated/ifccParser.h"
-#include "generated/ifccBaseVisitor.h"
 
 #include "CodeGenVisitor.h"
 
