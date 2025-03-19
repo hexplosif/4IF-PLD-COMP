@@ -34,6 +34,9 @@ Le code est organisé dans différents fichiers pour assurer la modularité :
 
 ## Gestion de Projet
 
+### Organisation 
+Toutes les tâches du sujet ont été recopié dans un Google Slide sur lequel on attribue chaque tâche à un binôme.
+
 ### Avancement passé
 - Mise en place de l'architecture du compilateur.
 - Implémentation des bases du `CodeGenVisitor`.
@@ -44,7 +47,7 @@ Le code est organisé dans différents fichiers pour assurer la modularité :
 ### Étapes à venir
 - Implémentation de l'IR
 - Ajout du support des structures de contrôle (if, while, for).
-- Support des fonctions.
+- Support des autres fonctionnalités prioritaires ainsi que certainne fonctionnalisté secondaires (tableaux, +=, ++, ect...)
 - Ajout de tests unitaires et d'intégration.
 
 ## Compilation et Exécution
