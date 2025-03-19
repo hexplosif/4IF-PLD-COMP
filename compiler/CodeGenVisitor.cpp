@@ -3,7 +3,7 @@
 int CodeGenVisitor::countDeclarations(antlr4::tree::ParseTree *tree)
 {
     int count = 0;
-    if (dynamic_cast<ifccParser::Decl_stmtContext *>(tree) != nullptr)
+    if (dynamic_cast<ifccParser::Sub_declContext *>(tree) != nullptr)
     {
         count++;
     }
@@ -92,7 +92,8 @@ antlrcpp::Any CodeGenVisitor::visitBlock(ifccParser::BlockContext *ctx)
         visit(stmt);
     }
 
-    // le block est finis, on revient vers scope de parent
+    // le block est finis, on synchronize le parent et ce scope; on revient vers scope de parent
+    currentScope->getParent()->synchronize(currentScope);
     currentScope = currentScope->getParent();
 
     return 0;
@@ -106,6 +107,16 @@ antlrcpp::Any CodeGenVisitor::visitBlock(ifccParser::BlockContext *ctx)
 antlrcpp::Any CodeGenVisitor::visitDecl_stmt(ifccParser::Decl_stmtContext *ctx)
 {
     std::string varType = ctx->type()->getText();
+    currentTypeInMultiDeclaration = varType;
+    for (auto sdecl : ctx->sub_decl()) {
+        this->visit(sdecl);
+    }
+
+    return 0;
+}
+
+antlrcpp::Any CodeGenVisitor::visitSub_decl(ifccParser::Sub_declContext *ctx) {
+    std::string varType = currentTypeInMultiDeclaration; 
     std::string varName = ctx->VAR()->getText();
 
     std::string varAddr;
@@ -130,6 +141,7 @@ antlrcpp::Any CodeGenVisitor::visitDecl_stmt(ifccParser::Decl_stmtContext *ctx)
         }
 
     } else { // sinon, on est dans le scope d'une fonction ou d'un block
+        std::cout << "    #    Local Sub_decl: " << varName << std::endl;
         int offset = currentScope->addLocalVariable(varName, varType);
         varAddr = std::to_string(offset) + "(%rbp)";
 
