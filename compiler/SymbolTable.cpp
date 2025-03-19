@@ -7,15 +7,25 @@ SymbolTable::SymbolTable( int initialOffset ) {
 }
 
 int SymbolTable::addLocalVariable(std::string name, std::string type) {
-    Parameters p = { getType(type) , currentDeclOffset, ScopeType::BLOCK };
-    table[name] = p;
-    currentDeclOffset += 4;
-    return currentDeclOffset - 4;
+    if (findVariableThisScope(name) == nullptr) {
+        Parameters p = { getType(type) , currentDeclOffset, ScopeType::BLOCK };
+        table[name] = p;
+        currentDeclOffset += 4;
+        return currentDeclOffset - 4;
+    } else {
+        std::cerr << "error: variable '" << name << "' has already declared\n";
+        exit(1);
+    }
 }
 
 void SymbolTable::addGlobalVariable(std::string name, std::string type) {
-    Parameters p = { getType(type) , currentDeclOffset, ScopeType::GLOBAL };
-    table[name] = p;
+    if (findVariableThisScope(name) == nullptr) {
+        Parameters p = { getType(type) , currentDeclOffset, ScopeType::GLOBAL };
+        table[name] = p; 
+    } else {
+        std::cerr << "error: variable '" << name << "' has already declared\n";
+        exit(1);
+    }
 }
 
 Parameters* SymbolTable::findVariable(std::string name) {

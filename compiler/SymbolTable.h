@@ -1,5 +1,4 @@
-#ifndef SYMBOLTABLE_H
-#define SYMBOLTABLE_H
+#pragma once
 
 #include <iostream>
 #include <map>
@@ -53,5 +52,3 @@ class SymbolTable
 
         VarType getType(std::string strType );
 };
-
-#endif // SYMBOLTABLE_H

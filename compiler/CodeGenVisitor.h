@@ -4,23 +4,22 @@
 #include <map>
 #include <string>
 
-#include "generated/ifccBaseVisitor.h"
 #include "SymbolTable.h"
-
+#include "generated/ifccBaseVisitor.h"
 
 class CodeGenVisitor : public ifccBaseVisitor
 {
-private:
-    SymbolTable* currentScope = nullptr; //see SymbolTable.h
-
+  private:
+    SymbolTable *currentScope = new SymbolTable(0); //  global scope
     // Fonction récursive pour compter les déclarations dans l'arbre
     int countDeclarations(antlr4::tree::ParseTree *tree);
+
     bool isExprIsConstant(ifccParser::ExprContext *ctx);
     int getConstantValueFromExpr(ifccParser::ExprContext *ctx);
 
-    std::string generateLabel(); 
+    std::string generateLabel();
 
-public:
+  public:
     virtual antlrcpp::Any visitProg(ifccParser::ProgContext *ctx) override;
 
     // ==============================================================
@@ -29,6 +28,7 @@ public:
 
     virtual antlrcpp::Any visitBlock(ifccParser::BlockContext *ctx) override;
     virtual antlrcpp::Any visitDecl_stmt(ifccParser::Decl_stmtContext *ctx) override;
+    virtual antlrcpp::Any visitSub_declWithType(ifccParser::Sub_declContext *ctx, std::string varType);
     virtual antlrcpp::Any visitAssign_stmt(ifccParser::Assign_stmtContext *ctx) override;
     virtual antlrcpp::Any visitReturn_stmt(ifccParser::Return_stmtContext *ctx) override;
 
