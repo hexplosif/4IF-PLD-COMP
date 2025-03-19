@@ -15,7 +15,8 @@ stmt
     ;
 
 decl_stmt : type VAR ('=' expr)? ';' ;  // Déclaration avec ou sans affectation
-assign_stmt : VAR '=' expr ';' ;         // Affectation
+assign_stmt : VAR op_assign expr ';' ; 
+op_assign : '=' | '+=' | '-=' | '*=' | '/=' | '%=' ;
 return_stmt : 'return' expr ';' ;         // On retourne une expression
 
 expr
@@ -32,6 +33,8 @@ expr
     | VAR                                           # VariableExpression
     | CONST                                         # ConstantExpression
     | CONST_CHAR                                    # ConstantCharExpression
+    | VAR '++'                                      # PostIncrementExpression
+    | VAR '--'                                      # PostDecrementExpression
     ;
 
 type : 'int' | 'char' ;

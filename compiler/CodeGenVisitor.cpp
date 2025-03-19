@@ -153,15 +153,51 @@ antlrcpp::Any CodeGenVisitor::visitAssign_stmt(ifccParser::Assign_stmtContext *c
         exit(1);
     }
 
-    visit(ctx->expr());
-    if (var->scopeType == ScopeType::GLOBAL) {
-        std::cout << "    movl %eax, " << varName << "(%rip)\n";
-    } else {
-        std::cout << "    movl %eax, " << var->offset << "(%rbp)" << "\n";
+    std::string op = ctx->op_assign()->getText();
+
+    if (op == "+=" || op == "-=" || op == "*=" || op == "/=" || op == "%=") {
+        if (var->scopeType == ScopeType::GLOBAL) {
+            std::cout << "    movl " << varName << "(%rip), %eax\n";
+        } else {
+            std::cout << "    movl " << var->offset << "(%rbp), %eax\n";
+        }
+        std::cout << "    pushq %rax\n";
+        visit(ctx->expr());
+        std::cout << "    popq %rcx\n";
+
+        std::cout << "    movl %eax, %ebx\n"; 
+        std::cout << "    movl %ecx, %eax\n"; 
+        std::cout << "    movl %ebx, %ecx\n"; 
+        if (op == "+=") {
+            std::cout << "    addl %ecx, %eax\n";
+        } else if (op == "-=") {
+            std::cout << "    subl %ecx, %eax\n";
+        } else if (op == "*=") {
+            std::cout << "    imull %ecx, %eax\n";
+        } else if (op == "/=" || op == "%=") { 
+            std::cout << "    cltd\n";            
+            std::cout << "    idivl %ecx\n";      
+            if (op == "%=") {
+                std::cout << "    movl %edx, %eax\n"; 
+            }
+        }
+
+        if (var->scopeType == ScopeType::GLOBAL) {
+            std::cout << "    movl %eax, " << varName << "(%rip)\n";
+        } else {
+            std::cout << "    movl %eax, " << var->offset << "(%rbp)\n";
+        }
+    } else if (op == "=") {
+        visit(ctx->expr());
+        if (var->scopeType == ScopeType::GLOBAL) {
+            std::cout << "    movl %eax, " << varName << "(%rip)\n";
+        } else {
+            std::cout << "    movl %eax, " << var->offset << "(%rbp)\n";
+        }
     }
+
     return 0;
 }
-
 // Gestion de l'instruction return
 antlrcpp::Any CodeGenVisitor::visitReturn_stmt(ifccParser::Return_stmtContext *ctx)
 {
@@ -458,6 +494,48 @@ antlrcpp::Any CodeGenVisitor::visitFunctionCallExpression(ifccParser::FunctionCa
     std::cout << "    call " << funcName << "\n";
 
     // The function's return value (if any) will be in %eax.
+    return 0;
+}
+
+//Increment and Decrement
+
+antlrcpp::Any CodeGenVisitor::visitPostIncrementExpression(ifccParser::PostIncrementExpressionContext *ctx)
+{
+    std::string varName = ctx->VAR()->getText();
+    Parameters *var = currentScope->findVariable(varName);
+    if (var == nullptr) {
+        std::cerr << "error: variable " << varName << " not declared.\n";
+        exit(1);
+    }
+
+    if (var->scopeType == ScopeType::GLOBAL) {
+        std::cout << "    movl " << varName << "(%rip), %eax\n"; 
+        std::cout << "    addl $1, " << varName << "(%rip)\n"; 
+    } else {
+        std::cout << "    movl " << var->offset << "(%rbp), %eax\n"; 
+        std::cout << "    addl $1, " << var->offset << "(%rbp)\n"; 
+    }
+
+    return 0;
+}
+
+antlrcpp::Any CodeGenVisitor::visitPostDecrementExpression(ifccParser::PostDecrementExpressionContext *ctx)
+{
+    std::string varName = ctx->VAR()->getText();
+    Parameters *var = currentScope->findVariable(varName);
+    if (var == nullptr) {
+        std::cerr << "error: variable " << varName << " not declared.\n";
+        exit(1);
+    }
+
+    if (var->scopeType == ScopeType::GLOBAL) {
+        std::cout << "    movl " << varName << "(%rip), %eax\n"; 
+        std::cout << "    subl $1, " << varName << "(%rip)\n";  
+    } else {
+        std::cout << "    movl " << var->offset << "(%rbp), %eax\n";
+        std::cout << "    subl $1, " << var->offset << "(%rbp)\n";  
+    }
+
     return 0;
 }
 
