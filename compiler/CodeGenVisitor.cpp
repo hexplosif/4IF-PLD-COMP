@@ -286,8 +286,8 @@ antlrcpp::Any CodeGenVisitor::visitBitwiseXorExpression(ifccParser::BitwiseXorEx
 antlrcpp::Any CodeGenVisitor::visitLogiqueParesseuxExpression(ifccParser::LogiqueParesseuxExpressionContext *ctx)
 {
     std::string op = ctx->op->getText();
-    std::string labelTrue = ".L1";
-    std::string labelEnd = ".L2";
+    std::string labelTrue = generateLabel(); 
+    std::string labelEnd = generateLabel();  
 
     if (op == "&&")
     {
@@ -328,6 +328,11 @@ antlrcpp::Any CodeGenVisitor::visitLogiqueParesseuxExpression(ifccParser::Logiqu
     return 0;
 }
 
+std::string CodeGenVisitor::generateLabel()
+{
+    static int labelCounter = 0; 
+    return ".L" + std::to_string(labelCounter++);
+}
 
 // Gestion de l'accès à une variable
 antlrcpp::Any CodeGenVisitor::visitVariableExpression(ifccParser::VariableExpressionContext *ctx)
