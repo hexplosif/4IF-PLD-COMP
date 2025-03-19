@@ -23,16 +23,17 @@ antlrcpp::Any CodeGenVisitor::visitProg(ifccParser::ProgContext *ctx)
     // Ca veut dire chaque fonction a son propre offset pour les variables.
     // Donc il faut recalculer les offsets pour chaque fonction, pas dans le visitProg.
 
-    //int totalVars = countDeclarations(ctx->block());
-    //currentDeclIndex = 0;
+    // int totalVars = countDeclarations(ctx->block());
+    // currentDeclIndex = 0;
 
-    if (!ctx->decl_stmt().empty()) { //si on a des variables globales
+    if (!ctx->decl_stmt().empty())
+    { // si on a des variables globales
         std::cout << "    .data\n";
     }
 
-    currentScope = new SymbolTable(0); //global scope
+    currentScope = new SymbolTable(0); // global scope
 
-    // Visiter tous decl_stmt 
+    // Visiter tous decl_stmt
     for (auto decl : ctx->decl_stmt())
     {
         visit(decl);
@@ -66,24 +67,27 @@ antlrcpp::Any CodeGenVisitor::visitBlock(ifccParser::BlockContext *ctx)
 {
     // Creer un nouveau scope quand on entre un nouveau block
     int offset;
-    if ( currentScope->isGlobalScope() ) {      // si ce bloc est une fonction, comme GlobalScope -> FunctionScope -> BlockScope
+    if (currentScope->isGlobalScope())
+    { // si ce bloc est une fonction, comme GlobalScope -> FunctionScope -> BlockScope
         // On calculate tous les variables dans la fonction et chercher le premier offset
-        int totalVars = countDeclarations(ctx); 
+        int totalVars = countDeclarations(ctx);
         offset = -totalVars * 4;
 
         // Allouer l'espace pour les variables (4 octets par variable, aligné à 16 octets)
         int stackSize = totalVars * 4;
         stackSize = (stackSize + 15) & ~15;
-        if (stackSize > 0) {
+        if (stackSize > 0)
+        {
             std::cout << "    subq $" << stackSize << ", %rsp\n";
         }
-            
-    } else {                                    // sinon, c'est un blockscope
+    }
+    else
+    { // sinon, c'est un blockscope
         // On laisse ce scope continue le offset de son parent
         offset = currentScope->getCurrentDeclOffset();
     }
 
-    SymbolTable* parentScope = currentScope;
+    SymbolTable *parentScope = currentScope;
     currentScope = new SymbolTable(offset);
     currentScope->setParent(parentScope);
 
@@ -107,40 +111,46 @@ antlrcpp::Any CodeGenVisitor::visitBlock(ifccParser::BlockContext *ctx)
 antlrcpp::Any CodeGenVisitor::visitDecl_stmt(ifccParser::Decl_stmtContext *ctx)
 {
     std::string varType = ctx->type()->getText();
-    currentTypeInMultiDeclaration = varType;
-    for (auto sdecl : ctx->sub_decl()) {
-        this->visit(sdecl);
+    for (auto sdecl : ctx->sub_decl())
+    {
+        visitSub_declWithType(sdecl, varType);
     }
 
     return 0;
 }
 
-antlrcpp::Any CodeGenVisitor::visitSub_decl(ifccParser::Sub_declContext *ctx) {
-    std::string varType = currentTypeInMultiDeclaration; 
+antlrcpp::Any CodeGenVisitor::visitSub_declWithType(ifccParser::Sub_declContext *ctx, std::string varType)
+{
     std::string varName = ctx->VAR()->getText();
 
     std::string varAddr;
-    if (currentScope->isGlobalScope()) { // si on est dans le scope global
+    if (currentScope->isGlobalScope())
+    { // si on est dans le scope global
         currentScope->addGlobalVariable(varName, varType);
 
         // On vérifie si la variable est initialisée avec une constante
-        if (ctx->expr() && !isExprIsConstant(ctx->expr())) {
+        if (ctx->expr() && !isExprIsConstant(ctx->expr()))
+        {
             std::cerr << "error: global variable must be initialized with a constant\n";
             exit(1);
         }
 
         // on declare la variable
-        std::cout <<"    .globl " << varName << "\n";
+        std::cout << "    .globl " << varName << "\n";
         std::cout << varName << ":\n";
 
-        if (ctx->expr()) {    
+        if (ctx->expr())
+        {
             int value = getConstantValueFromExpr(ctx->expr());
             std::cout << "    .long " << value << "\n";
-        } else {
+        }
+        else
+        {
             std::cout << "    .zero 4\n";
         }
-
-    } else { // sinon, on est dans le scope d'une fonction ou d'un block
+    }
+    else
+    { // sinon, on est dans le scope d'une fonction ou d'un block
         std::cout << "    #    Local Sub_decl: " << varName << std::endl;
         int offset = currentScope->addLocalVariable(varName, varType);
         varAddr = std::to_string(offset) + "(%rbp)";
@@ -160,15 +170,19 @@ antlrcpp::Any CodeGenVisitor::visitAssign_stmt(ifccParser::Assign_stmtContext *c
 {
     std::string varName = ctx->VAR()->getText();
     Parameters *var = currentScope->findVariable(varName);
-    if (var == nullptr) {
+    if (var == nullptr)
+    {
         std::cerr << "error: variable " << varName << " not declared.\n";
         exit(1);
     }
 
     visit(ctx->expr());
-    if (var->scopeType == ScopeType::GLOBAL) {
+    if (var->scopeType == ScopeType::GLOBAL)
+    {
         std::cout << "    movl %eax, " << varName << "(%rip)\n";
-    } else {
+    }
+    else
+    {
         std::cout << "    movl %eax, " << var->offset << "(%rbp)" << "\n";
     }
     return 0;
@@ -294,21 +308,20 @@ antlrcpp::Any CodeGenVisitor::visitBitwiseXorExpression(ifccParser::BitwiseXorEx
     return 0;
 }
 
-
 antlrcpp::Any CodeGenVisitor::visitLogiqueParesseuxExpression(ifccParser::LogiqueParesseuxExpressionContext *ctx)
 {
     std::string op = ctx->op->getText();
-    std::string labelTrue = generateLabel(); 
-    std::string labelEnd = generateLabel();  
+    std::string labelTrue = generateLabel();
+    std::string labelEnd = generateLabel();
 
     if (op == "&&")
     {
         visit(ctx->expr(0)); // Évaluer le premier opérande
-        std::cout << "    cmpl $0, %eax\n"; 
+        std::cout << "    cmpl $0, %eax\n";
         std::cout << "    je " << labelEnd << "\n"; // Sauter à la fin si faux
 
         visit(ctx->expr(1)); // Évaluer le deuxième opérande
-        std::cout << "    cmpl $0, %eax\n"; 
+        std::cout << "    cmpl $0, %eax\n";
         std::cout << "    je " << labelEnd << "\n"; // Sauter à la fin si faux
 
         std::cout << labelTrue << ":\n";
@@ -321,7 +334,7 @@ antlrcpp::Any CodeGenVisitor::visitLogiqueParesseuxExpression(ifccParser::Logiqu
     else if (op == "||")
     {
         visit(ctx->expr(0)); // Évaluer le premier opérande
-        std::cout << "    cmpl $0, %eax\n"; 
+        std::cout << "    cmpl $0, %eax\n";
         std::cout << "    jne " << labelTrue << "\n"; // Sauter à vrai si non zéro
 
         visit(ctx->expr(1)); // Évaluer le deuxième opérande
@@ -342,7 +355,7 @@ antlrcpp::Any CodeGenVisitor::visitLogiqueParesseuxExpression(ifccParser::Logiqu
 
 std::string CodeGenVisitor::generateLabel()
 {
-    static int labelCounter = 0; 
+    static int labelCounter = 0;
     return ".L" + std::to_string(labelCounter++);
 }
 
@@ -351,14 +364,18 @@ antlrcpp::Any CodeGenVisitor::visitVariableExpression(ifccParser::VariableExpres
 {
     std::string varName = ctx->VAR()->getText();
     Parameters *var = currentScope->findVariable(varName);
-    if (var == nullptr) {
+    if (var == nullptr)
+    {
         std::cerr << "error: variable " << varName << " not declared\n";
         exit(1);
     }
 
-    if (var->scopeType == ScopeType::GLOBAL) {
+    if (var->scopeType == ScopeType::GLOBAL)
+    {
         std::cout << "    movl " << varName << "(%rip), %eax" << "\n";
-    } else {
+    }
+    else
+    {
         std::cout << "    movl " << var->offset << "(%rbp), %eax" << "\n";
     }
 
@@ -478,9 +495,9 @@ antlrcpp::Any CodeGenVisitor::visitFunctionCallExpression(ifccParser::FunctionCa
 // ==============================================================
 bool CodeGenVisitor::isExprIsConstant(ifccParser::ExprContext *ctx)
 {
-    if (dynamic_cast<ifccParser::ConstantExpressionContext*>(ctx) != nullptr ||
-        dynamic_cast<ifccParser::ConstantCharExpressionContext*>(ctx) != nullptr
-    ) {
+    if (dynamic_cast<ifccParser::ConstantExpressionContext *>(ctx) != nullptr ||
+        dynamic_cast<ifccParser::ConstantCharExpressionContext *>(ctx) != nullptr)
+    {
         return true;
     }
     return false;
@@ -488,11 +505,12 @@ bool CodeGenVisitor::isExprIsConstant(ifccParser::ExprContext *ctx)
 
 int CodeGenVisitor::getConstantValueFromExpr(ifccParser::ExprContext *ctx)
 {
-    if (auto constExpr = dynamic_cast<ifccParser::ConstantExpressionContext*>(ctx)) {
+    if (auto constExpr = dynamic_cast<ifccParser::ConstantExpressionContext *>(ctx))
+    {
         std::string constText = constExpr->CONST()->getText();
         return std::stoi(constText);
     }
-    //TODO: get case of char
+    // TODO: get case of char
 
     return 0;
 }
