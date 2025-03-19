@@ -10,8 +10,7 @@
 class CodeGenVisitor : public ifccBaseVisitor
 {
   private:
-    SymbolTable *currentScope = nullptr; // see SymbolTable.h
-
+    SymbolTable *currentScope = new SymbolTable(0); //  global scope
     // Fonction récursive pour compter les déclarations dans l'arbre
     int countDeclarations(antlr4::tree::ParseTree *tree);
 

@@ -31,8 +31,6 @@ antlrcpp::Any CodeGenVisitor::visitProg(ifccParser::ProgContext *ctx)
         std::cout << "    .data\n";
     }
 
-    currentScope = new SymbolTable(0); // global scope
-
     // Visiter tous decl_stmt
     for (auto decl : ctx->decl_stmt())
     {
