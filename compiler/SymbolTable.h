@@ -3,6 +3,8 @@
 
 #include <iostream>
 #include <map>
+#include <vector>
+#include <algorithm>    // std::find
 
 enum VarType {
     INT,
@@ -50,6 +52,8 @@ class SymbolTable
         SymbolTable *getParent() { return parent; }
         int getCurrentDeclOffset() { return currentDeclOffset; }
 
+        static VarType getHigherType(VarType type1, VarType type2);
+
     private:
         std::map<std::string, Parameters> table;
         int currentDeclOffset = 0;
@@ -57,6 +61,8 @@ class SymbolTable
         SymbolTable *parent = nullptr;
 
         VarType getType(std::string strType );
+        static constexpr std::array<VarType, 2> typeRank = {VarType::CHAR, VarType::INT};
+            // char < int < unsigned int < long < unsigned long < long long < unsigned long long < float < double < long double
 };
 
 #endif // SYMBOLTABLE_H

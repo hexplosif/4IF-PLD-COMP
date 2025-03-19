@@ -17,6 +17,8 @@ private:
     int countDeclarations(antlr4::tree::ParseTree *tree);
 
     std::string generateLabel(); 
+    VarType getHigherType( antlrcpp::Any left, antlrcpp::Any right );
+    void setExprValueToRegister(antlrcpp::Any expr, std::string reg); // si expr est une constante, met la valeur dans le registre, si non met la valeur de %eax dans le registre
 
 public:
     virtual antlrcpp::Any visitProg(ifccParser::ProgContext *ctx) override;

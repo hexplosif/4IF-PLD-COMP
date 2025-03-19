@@ -145,12 +145,7 @@ antlrcpp::Any CodeGenVisitor::visitSub_decl(ifccParser::Sub_declContext *ctx) {
         if (!ctx->expr()) return 0;  // si la variable n'est pas initialisée, on ne fait rien
 
         auto expr = visit(ctx->expr()); 
-        if (expr.is<Constant>()) {
-            std::cout << "    movl $" << expr.as<Constant>().value << ", " << offset << "(%rbp)" << "\n";
-        } else {
-            visit(ctx->expr());
-            std::cout << "    movl %eax, " << offset << "(%rbp)" << "\n";
-        }
+        setExprValueToRegister(expr, std::to_string(offset) + "(%rbp)");
     }
 
     return 0;
@@ -174,11 +169,7 @@ antlrcpp::Any CodeGenVisitor::visitAssign_stmt(ifccParser::Assign_stmtContext *c
 
     // Évaluer l'expression
     auto expr = visit(ctx->expr());
-    if (expr.is<Constant>()) {
-        std::cout << "    movl $" << expr.as<Constant>().value << ", " << varAddr << "\n";
-    } else {
-        std::cout << "    movl %eax, " << varAddr << "\n";
-    }
+    setExprValueToRegister(expr, varAddr);
     return 0;
 }
 
@@ -238,7 +229,8 @@ antlrcpp::Any CodeGenVisitor::visitAddSubExpression(ifccParser::AddSubExpression
         int result = (op == "+") 
                         ? left.as<Constant>().value + right.as<Constant>().value 
                         : left.as<Constant>().value - right.as<Constant>().value;
-        return Constant{result, left.as<Constant>().type};
+        VarType resultType = getHigherType( left, right );
+        return Constant{result, resultType};
     }
 
     // Neutral element: x + 0 = x, x - 0 = x
@@ -302,7 +294,8 @@ antlrcpp::Any CodeGenVisitor::visitMulDivExpression(ifccParser::MulDivExpression
                         :   (op == "/")
                             ? left.as<Constant>().value / right.as<Constant>().value
                             : left.as<Constant>().value % right.as<Constant>().value;
-        return Constant{result, left.as<Constant>().type};
+        VarType resultType = getHigherType(left, right);
+        return Constant{result, resultType};
     }
 
     // Neutral element: x * 1 = x, x / 1 = x
@@ -319,7 +312,8 @@ antlrcpp::Any CodeGenVisitor::visitMulDivExpression(ifccParser::MulDivExpression
     // Neutral element: x * 0 = 0, x % 0 = 0
     if (right.is<Constant>() && right.as<Constant>().value == 0) {
         std::cout << "    popq %rcx\n"; // Enlever expr-left qu'on a empilé
-        return Constant{0, right.as<Constant>().type};
+        VarType resultType = getHigherType(left, right);
+        return Constant{0, resultType};
     }
 
     // Special case: x * constant
@@ -404,7 +398,8 @@ antlrcpp::Any CodeGenVisitor::visitBitwiseAndExpression(ifccParser::BitwiseAndEx
     // Constant folding
     if (left.is<Constant>() && right.is<Constant>()) {
         int result = left.as<Constant>().value & right.as<Constant>().value;
-        return Constant{result, left.as<Constant>().type};
+        VarType resultType = getHigherType(left, right);
+        return Constant{result, resultType};
     }
 
     // Neutral element: x & -1 = x (toutes les bits à 1)
@@ -426,7 +421,8 @@ antlrcpp::Any CodeGenVisitor::visitBitwiseAndExpression(ifccParser::BitwiseAndEx
         if (!left.is<Constant>()) {
             std::cout << "    popq %rcx\n";  // Dépiler left (non utilisé)
         }
-        return Constant{0, left.as<Constant>().type};
+        VarType resultType = getHigherType(left, right);
+        return Constant{0, resultType};
     }
 
     // Special case: x & constant
@@ -460,7 +456,8 @@ antlrcpp::Any CodeGenVisitor::visitBitwiseOrExpression(ifccParser::BitwiseOrExpr
     // Constant folding
     if (left.is<Constant>() && right.is<Constant>()) {
         int result = left.as<Constant>().value | right.as<Constant>().value;
-        return Constant{result, left.as<Constant>().type};
+        VarType resultType = getHigherType(left, right);
+        return Constant{result, resultType};
     }
 
     // Neutral element: x | 0 = x
@@ -482,7 +479,8 @@ antlrcpp::Any CodeGenVisitor::visitBitwiseOrExpression(ifccParser::BitwiseOrExpr
         if (!left.is<Constant>()) {
             std::cout << "    popq %rcx\n";  // Dépiler left (non utilisé)
         }
-        return Constant{-1, VarType::INT};
+        VarType resultType = getHigherType(left, right);
+        return Constant{-1, resultType};
     }
 
     // Special case: x | constant
@@ -516,7 +514,8 @@ antlrcpp::Any CodeGenVisitor::visitBitwiseXorExpression(ifccParser::BitwiseXorEx
     // Constant folding
     if (left.is<Constant>() && right.is<Constant>()) {
         int result = left.as<Constant>().value ^ right.as<Constant>().value;
-        return Constant{result, left.as<Constant>().type};
+        VarType resultType = getHigherType(left, right);
+        return Constant{result, resultType};
     }
 
     // Neutral element: x ^ 0 = x
@@ -583,7 +582,7 @@ antlrcpp::Any CodeGenVisitor::visitLogiqueParesseuxExpression(ifccParser::Logiqu
         std::cout << "    je " << labelEnd << "\n"; // Sauter à la fin si faux
 
         auto right = visit(ctx->expr(1)); // Évaluer le deuxième opérande
-        if (right.is<Constant>()) { std::cout << "    movl $" << left.as<Constant>().value << ", %eax\n"; }
+        if (right.is<Constant>()) { std::cout << "    movl $" << right.as<Constant>().value << ", %eax\n"; }
         std::cout << "    cmpl $0, %eax\n"; 
         std::cout << "    je " << labelEnd << "\n"; // Sauter à la fin si faux
 
@@ -602,7 +601,7 @@ antlrcpp::Any CodeGenVisitor::visitLogiqueParesseuxExpression(ifccParser::Logiqu
         std::cout << "    jne " << labelTrue << "\n"; // Sauter à vrai si non zéro
 
         auto right = visit(ctx->expr(1)); // Évaluer le deuxième opérande
-        if (right.is<Constant>()) { std::cout << "    movl $" << left.as<Constant>().value << ", %eax\n"; }
+        if (right.is<Constant>()) { std::cout << "    movl $" << right.as<Constant>().value << ", %eax\n"; }
         std::cout << "    cmpl $0, %eax\n";
         std::cout << "    jne " << labelTrue << "\n"; // Sauter à vrai si non zéro
 
@@ -670,11 +669,15 @@ antlrcpp::Any CodeGenVisitor::visitComparisonExpression(ifccParser::ComparisonEx
 {
     // TODO: Implementer les optimisations pour les constantes
     auto left = visit(ctx->expr(0)); // Évalue l'opérande gauche
-    if (left.is<Constant>()) { std::cout << "    movl $" << left.as<Constant>().value << ", %eax\n"; }
+    if (left.is<Constant>()) { 
+        std::cout << "    movl $" << left.as<Constant>().value << ", %eax\n"; 
+    }
     std::cout << "    pushq %rax\n";
     
     auto right = visit(ctx->expr(1)); // Évalue l'opérande droite
-    if (right.is<Constant>()) { std::cout << "    movl $" << right.as<Constant>().value << ", %eax\n"; }
+    if (right.is<Constant>()) { 
+        std::cout << "    movl $" << right.as<Constant>().value << ", %eax\n"; 
+    }
     std::cout << "    popq %rcx\n";
     std::cout << "    cmpl %eax, %ecx\n";
 
@@ -732,26 +735,26 @@ antlrcpp::Any CodeGenVisitor::visitFunctionCallExpression(ifccParser::FunctionCa
     for (size_t i = 0; i < args.size(); i++)
     {
         auto expr = visit(args[i]);
-        if (expr.is<Constant>()) { std::cout << "    movl $" << expr.as<Constant>().value << ", %eax\n"; }
         switch (i)
         {
         case 0:
-            std::cout << "    movl %eax, %edi\n";
+            setExprValueToRegister(expr, "%edi");
             break;
         case 1:
-            std::cout << "    movl %eax, %esi\n";
+            setExprValueToRegister(expr, "%esi");
             break;
         case 2:
-            std::cout << "    movl %eax, %edx\n";
+            setExprValueToRegister(expr, "%edx");
             break;
         case 3:
-            std::cout << "    movl %eax, %ecx\n";
+            setExprValueToRegister(expr, "%ecx");
+
             break;
         case 4:
-            std::cout << "    movl %eax, %r8d\n";
+            setExprValueToRegister(expr, "%r8d");
             break;
         case 5:
-            std::cout << "    movl %eax, %r9d\n";
+            setExprValueToRegister(expr, "%r9d");
             break;
         }
     }
@@ -761,4 +764,34 @@ antlrcpp::Any CodeGenVisitor::visitFunctionCallExpression(ifccParser::FunctionCa
 
     // The function's return value (if any) will be in %eax.
     return 0;
+}
+
+// ==========================================================
+//                          Others
+// ==========================================================
+VarType CodeGenVisitor::getHigherType(antlrcpp::Any left, antlrcpp::Any right) {
+    bool isLeftCst = left.is<Constant>();
+    bool isRightCst = right.is<Constant>();
+    if (isLeftCst && isRightCst) {
+        return SymbolTable::getHigherType( left.as<Constant>().type, right.as<Constant>().type );
+    }
+
+    if (isLeftCst) {
+        return left.as<Constant>().type;
+    }
+
+    if (isRightCst) {
+        return right.as<Constant>().type;
+    }
+
+    std::cerr << "There isn't constant in left and right" << std::endl;
+    exit(1);
+}
+
+void CodeGenVisitor::setExprValueToRegister(antlrcpp::Any expr, std::string reg) {
+    if (expr.is<Constant>()) {
+        std::cout << "    movl $" << expr.as<Constant>().value << ", " << reg << "\n";
+    } else {
+        std::cout << "    movl %eax, " << reg << "\n";
+    }
 }

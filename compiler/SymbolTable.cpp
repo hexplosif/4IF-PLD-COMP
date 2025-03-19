@@ -50,3 +50,9 @@ VarType SymbolTable::getType( std::string strType ) {
     std::cerr << "error: unknown type " << strType << std::endl;
     exit(1);
 }
+
+VarType SymbolTable::getHigherType(VarType type1, VarType type2) {
+    int rankType1 = std::find(typeRank.begin(), typeRank.end(), type1) - typeRank.begin();
+    int rankType2 = std::find(typeRank.begin(), typeRank.end(), type2) - typeRank.begin();
+    return typeRank[std::max(rankType1, rankType2)];
+}
