@@ -4,35 +4,36 @@
 # Then config.mk should be in the .gitignore of your project
 include config.mk
 
-CC=g++
-CCFLAGS=-g -c -std=c++17 -I$(ANTLRINC) -Wno-attributes # -Wno-defaulted-function-deleted -Wno-unknown-warning-option
-LDFLAGS=-g
+CC = g++
+CCFLAGS = -g -c -std=c++17 -I$(ANTLRINC) -Wno-attributes
+LDFLAGS = -g
 
 default: all
 all: ifcc
 
 ##########################################
 # link together all pieces of our compiler 
-OBJECTS=build/ifccBaseVisitor.o \
-	build/ifccLexer.o \
-	build/ifccVisitor.o \
-	build/ifccParser.o \
-	build/main.o \
-	build/CodeGenVisitor.o \
-	build/SymbolTable.o
+OBJECTS = build/ifccBaseVisitor.o \
+          build/ifccLexer.o \
+          build/ifccVisitor.o \
+          build/ifccParser.o \
+          build/main.o \
+          build/CodeGenVisitor.o \
+          build/SymbolTable.o \
+          build/IR.o
 
 ifcc: $(OBJECTS)
 	@mkdir -p build
 	$(CC) $(LDFLAGS) build/*.o $(ANTLRLIB) -o ifcc
 
 ##########################################
-# compile our hand-writen C++ code: main(), CodeGenVisitor, etc.
+# compile our hand-written C++ code: main(), CodeGenVisitor, SymbolTable, IR, etc.
 build/%.o: %.cpp generated/ifccParser.cpp
 	@mkdir -p build
 	$(CC) $(CCFLAGS) -MMD -o $@ $< 
 
 ##########################################
-# compile all the antlr-generated C++
+# compile all the antlr-generated C++ sources
 build/%.o: generated/%.cpp
 	@mkdir -p build
 	$(CC) $(CCFLAGS) -MMD -o $@ $< 
@@ -42,7 +43,7 @@ build/%.o: generated/%.cpp
 build/%.d:
 
 ##########################################
-# generate the C++ implementation of our Lexer/Parser/Visitor
+# generate the C++ implementation of our Lexer/Parser/Visitor from the grammar ifcc.g4
 generated/ifccLexer.cpp: generated/ifccParser.cpp
 generated/ifccVisitor.cpp: generated/ifccParser.cpp
 generated/ifccBaseVisitor.cpp: generated/ifccParser.cpp
@@ -50,12 +51,11 @@ generated/ifccParser.cpp: ifcc.g4
 	@mkdir -p generated
 	$(ANTLR) -visitor -no-listener -Dlanguage=Cpp -o generated ifcc.g4
 
-# prevent automatic cleanup of "intermediate" files like ifccLexer.cpp etc
+# prevent automatic cleanup of "intermediate" files like ifccLexer.cpp etc.
 .PRECIOUS: generated/ifcc%.cpp   
 
 ##########################################
 # view the parse tree in a graphical window
-
 # Usage: `make gui FILE=path/to/your/file.c`
 FILE ?= ../tests/testfiles/1_return42.c
 
