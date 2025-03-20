@@ -33,7 +33,11 @@ antlrcpp::Any CodeValidationVisitor::visitBlock(ifccParser::BlockContext* ctx) {
         visit(stmt);
     }
     
-    currentScope = currentScope->getParent(); // Exit scope
+    // Return to parent scope and clean up memory after block ends
+    SymbolTable* oldScope = currentScope;
+    currentScope = currentScope->getParent();
+    delete oldScope;
+
     return 0;
 }
 

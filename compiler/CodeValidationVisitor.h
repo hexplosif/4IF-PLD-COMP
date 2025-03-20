@@ -28,4 +28,13 @@ class CodeValidationVisitor : public ifccBaseVisitor
     virtual antlrcpp::Any visitSub_declWithType(ifccParser::Sub_declContext *ctx, std::string varType);
     virtual antlrcpp::Any visitAssign_stmt(ifccParser::Assign_stmtContext *ctx) override;
     virtual antlrcpp::Any visitVariableExpression(ifccParser::VariableExpressionContext *ctx) override;
+
+    // destructor to free memory
+    ~CodeValidationVisitor() {
+      while (currentScope) {
+          SymbolTable* parent = currentScope->getParent();
+          delete currentScope;
+          currentScope = parent;
+      }
+    } 
 };
