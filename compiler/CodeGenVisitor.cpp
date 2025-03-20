@@ -126,13 +126,6 @@ antlrcpp::Any CodeGenVisitor::visitSub_declWithType(ifccParser::Sub_declContext 
     { // si on est dans le scope global
         currentScope->addGlobalVariable(varName, varType);
 
-        // On vérifie si la variable est initialisée avec une constante
-        if (ctx->expr() && !isExprIsConstant(ctx->expr()))
-        {
-            std::cerr << "error: global variable must be initialized with a constant" << std::endl;
-            exit(1);
-        }
-
         // on declare la variable
         std::cout << "    .globl " << varName << std::endl;
         std::cout << varName << ":" << std::endl;
@@ -168,11 +161,6 @@ antlrcpp::Any CodeGenVisitor::visitAssign_stmt(ifccParser::Assign_stmtContext *c
 {
     std::string varName = ctx->VAR()->getText();
     SymbolParameters *var = currentScope->findVariable(varName);
-    if (var == nullptr)
-    {
-        std::cerr << "error: variable " << varName << " not declared." << std::endl;
-        exit(1);
-    }
 
     std::string op = ctx->op_assign()->getText();
 
@@ -415,11 +403,6 @@ antlrcpp::Any CodeGenVisitor::visitVariableExpression(ifccParser::VariableExpres
 {
     std::string varName = ctx->VAR()->getText();
     SymbolParameters *var = currentScope->findVariable(varName);
-    if (var == nullptr)
-    {
-        std::cerr << "error: variable " << varName << " not declared" << std::endl;
-        exit(1);
-    }
 
     if (var->scopeType == SymbolScopeType::GLOBAL)
     {
@@ -547,11 +530,6 @@ antlrcpp::Any CodeGenVisitor::visitPostIncrementExpression(ifccParser::PostIncre
 {
     std::string varName = ctx->VAR()->getText();
     SymbolParameters *var = currentScope->findVariable(varName);
-    if (var == nullptr)
-    {
-        std::cerr << "error: variable " << varName << " not declared." << std::endl;
-        exit(1);
-    }
 
     if (var->scopeType == SymbolScopeType::GLOBAL)
     {
@@ -571,11 +549,6 @@ antlrcpp::Any CodeGenVisitor::visitPostDecrementExpression(ifccParser::PostDecre
 {
     std::string varName = ctx->VAR()->getText();
     SymbolParameters *var = currentScope->findVariable(varName);
-    if (var == nullptr)
-    {
-        std::cerr << "error: variable " << varName << " not declared." << std::endl;
-        exit(1);
-    }
 
     if (var->scopeType == SymbolScopeType::GLOBAL)
     {
@@ -594,15 +567,6 @@ antlrcpp::Any CodeGenVisitor::visitPostDecrementExpression(ifccParser::PostDecre
 // ==============================================================
 //                          Others
 // ==============================================================
-bool CodeGenVisitor::isExprIsConstant(ifccParser::ExprContext *ctx)
-{
-    if (dynamic_cast<ifccParser::ConstantExpressionContext *>(ctx) != nullptr ||
-        dynamic_cast<ifccParser::ConstantCharExpressionContext *>(ctx) != nullptr)
-    {
-        return true;
-    }
-    return false;
-}
 
 int CodeGenVisitor::getConstantValueFromExpr(ifccParser::ExprContext *ctx)
 {

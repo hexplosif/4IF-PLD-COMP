@@ -9,6 +9,7 @@
 #include "generated/ifccParser.h"
 
 #include "CodeGenVisitor.h"
+#include "CodeValidationVisitor.h"
 
 using namespace antlr4;
 using namespace std;
@@ -47,6 +48,9 @@ int main(int argn, const char **argv)
         cerr << "error: syntax error during parsing" << endl;
         exit(1);
     }
+
+    CodeValidationVisitor preVisit;
+    preVisit.visit(tree);
 
     CodeGenVisitor v;
     v.visit(tree);

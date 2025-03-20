@@ -14,7 +14,6 @@ class CodeGenVisitor : public ifccBaseVisitor
     // Fonction récursive pour compter les déclarations dans l'arbre
     int countDeclarations(antlr4::tree::ParseTree *tree);
 
-    bool isExprIsConstant(ifccParser::ExprContext *ctx);
     int getConstantValueFromExpr(ifccParser::ExprContext *ctx);
 
     std::string generateLabel();
@@ -44,7 +43,7 @@ class CodeGenVisitor : public ifccBaseVisitor
     virtual antlrcpp::Any visitUnaryLogicalNotExpression(ifccParser::UnaryLogicalNotExpressionContext *ctx) override;
     virtual antlrcpp::Any visitPostIncrementExpression(ifccParser::PostIncrementExpressionContext *ctx) override;
     virtual antlrcpp::Any visitPostDecrementExpression(ifccParser::PostDecrementExpressionContext *ctx) override;
-    virtual antlrcpp::Any visitFunctionCallExpression(ifccParser::FunctionCallExpressionContext *ctx) override;
+    virtual antlrcpp::Any visitFunctionCallExpression(ifccParser::FunctionCallExpressionContext *ctx);
     // Precedence 3:
     virtual antlrcpp::Any visitMulDivExpression(ifccParser::MulDivExpressionContext *ctx) override;
     // Precedence 4:
