@@ -37,6 +37,8 @@ class SymbolTable
         SymbolTable *getParent() { return parent; }
         int getCurrentDeclOffset() { return currentDeclOffset; }
 
+        void printTable();
+
     private:
         std::map<std::string, Symbol> table;
         int currentDeclOffset = 0;

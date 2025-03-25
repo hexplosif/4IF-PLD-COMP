@@ -15,156 +15,155 @@ IRInstr::IRInstr(BasicBlock *bb_, Operation op, VarType t, std::vector<std::stri
 void IRInstr::gen_asm(std::ostream &o)
 {
     // Pour simplifier, on gère ici ldconst, copy, add, sub et mul.
-    std::string p0 = bb->cfg->IR_reg_to_asm(params[0]);
 
-    std::string p1 = params.size() >= 2 ? bb->cfg->IR_reg_to_asm(params[1]) : "";
-    std::string p2 = params.size() >= 3 ? bb->cfg->IR_reg_to_asm(params[2]) : "";
 
     switch (op)
     {
     case ldconst:
         // ldconst: params[0] = destination, params[1] = constante
-        o << "    movl $" << p1 << ", " << p0 << "\n";
+        o << "    movl $" << params[1] << ", " << params[0] << "\n";
         break;
     case copy:
         // copy: params[0] = destination, params[1] = source
-        o << "    movl " << p1 << ", %eax\n";
-        o << "    movl %eax, " << p0 << "\n"; // Stocke le résultat
+        o << "    movl " << params[1] << ", %eax\n";
+        o << "    movl %eax, " << params[0] << "\n"; // Stocke le résultat
         break;
     case add:
         // add: params[0] = dest, params[1] = gauche, params[2] = droite
-        o << "    movl " << p1 << ", %eax\n";
-        o << "    addl " << p2 << ", %eax\n";
-        o << "    movl %eax, " << p0 << "\n";
+        o << "    movl " << params[1] << ", %eax\n";
+        o << "    addl " << params[2] << ", %eax\n";
+        o << "    movl %eax, " << params[0] << "\n";
         break;
     case sub:
-        o << "    movl " << p1 << ", %eax\n";
-        o << "    subl " << p2 << ", %eax\n";
-        o << "    movl %eax, " << p0 << "\n";
+        o << "    movl " << params[1] << ", %eax\n";
+        o << "    subl " << params[2] << ", %eax\n";
+        o << "    movl %eax, " << params[0] << "\n";
         break;
     case mul:
-        o << "    movl " << p1 << ", %eax\n";
-        o << "    imull " << p2 << ", %eax\n";
-        o << "    movl %eax, " << p0 << "\n";
+        o << "    movl " << params[1] << ", %eax\n";
+        o << "    imull " << params[2] << ", %eax\n";
+        o << "    movl %eax, " << params[0] << "\n";
         break;
     case div:    // params : dest, source1, source2
-        o << "    movl " << p1 << ", %eax\n";
+        o << "    movl " << params[1] << ", %eax\n";
         o << "    cltd\n";
-        o << "    idivl " << p2 << "\n";
-        o << "    movl %eax, " << p0 << "\n";
+        o << "    idivl " << params[2] << "\n";
+        o << "    movl %eax, " << params[0] << "\n";
         break;
     case mod:    // params : dest, source1, source2
-        o << "    movl " << p1 << ", %eax\n";
+        o << "    movl " << params[1] << ", %eax\n";
         o << "    cltd\n";
-        o << "    idivl " << p2 << "\n";
-        o << "    movl %edx, " << p0 << "\n";
+        o << "    idivl " << params[2] << "\n";
+        o << "    movl %edx, " << params[0] << "\n";
         break;  
 
     case cmp_eq:
         // cmp_eq: params[0] = dest, params[1] = gauche, params[2] = droite
-        o << "    movl " << p1 << ", %eax\n";
-        o << "    cmpl " << p2 << ", %eax\n";
+        o << "    movl " << params[1] << ", %eax\n";
+        o << "    cmpl " << params[2] << ", %eax\n";
         o << "    sete %al\n";
         o << "    movzbl %al, %eax\n";
-        o << "    movl %eax, " << p0 << "\n";
+        o << "    movl %eax, " << params[0] << "\n";
         break;
     case cmp_lt:
         // cmp_lt: params[0] = dest, params[1] = gauche, params[2] = droite
-        o << "    movl " << p1 << ", %eax\n";
-        o << "    cmpl " << p2 << ", %eax\n";
+        o << "    movl " << params[1] << ", %eax\n";
+        o << "    cmpl " << params[2] << ", %eax\n";
         o << "    setl %al\n";
         o << "    movzbl %al, %eax\n";
-        o << "    movl %eax, " << p0 << "\n";
+        o << "    movl %eax, " << params[0] << "\n";
         break;
     case cmp_le:
         // cmp_le: params[0] = dest, params[1] = gauche, params[2] = droite
-        o << "    movl " << p1 << ", %eax\n";
-        o << "    cmpl " << p2 << ", %eax\n";
+        o << "    movl " << params[1] << ", %eax\n";
+        o << "    cmpl " << params[2] << ", %eax\n";
         o << "    setle %al\n";
         o << "    movzbl %al, %eax\n";
-        o << "    movl %eax, " << p0 << "\n";
+        o << "    movl %eax, " << params[0] << "\n";
         break;
     
     case cmp_ne:
         // cmp_ne: params[0] = dest, params[1] = gauche, params[2] = droite
-        o << "    movl " << p1 << ", %eax\n";
-        o << "    cmpl " << p2 << ", %eax\n";
+        o << "    movl " << params[1] << ", %eax\n";
+        o << "    cmpl " << params[2] << ", %eax\n";
         o << "    setne %al\n";
         o << "    movzbl %al, %eax\n";
-        o << "    movl %eax, " << p0 << "\n";
+        o << "    movl %eax, " << params[0] << "\n";
         break;
     
     case cmp_gt:
         // cmp_gt: params[0] = dest, params[1] = gauche, params[2] = droite
-        o << "    movl " << p1 << ", %eax\n";
-        o << "    cmpl " << p2 << ", %eax\n";
+        o << "    movl " << params[1] << ", %eax\n";
+        o << "    cmpl " << params[2] << ", %eax\n";
         o << "    setg %al\n";
         o << "    movzbl %al, %eax\n";
-        o << "    movl %eax, " << p0 << "\n";
+        o << "    movl %eax, " << params[0] << "\n";
         break;
 
     case cmp_ge:
         // cmp_ge: params[0] = dest, params[1] = gauche, params[2] = droite
-        o << "    movl " << p1 << ", %eax\n";
-        o << "    cmpl " << p2 << ", %eax\n";
+        o << "    movl " << params[1] << ", %eax\n";
+        o << "    cmpl " << params[2] << ", %eax\n";
         o << "    setge %al\n";
         o << "    movzbl %al, %eax\n";
-        o << "    movl %eax, " << p0 << "\n";
+        o << "    movl %eax, " << params[0] << "\n";
         break;
 
     case bit_and:
         // bit_and: params[0] = dest, params[1] = gauche, params[2] = droite
-        o << "    movl " << p1 << ", %eax\n";
-        o << "    andl " << p2 << ", %eax\n";
-        o << "    movl %eax, " << p0 << "\n";
+        o << "    movl " << params[1] << ", %eax\n";
+        o << "    andl " << params[2] << ", %eax\n";
+        o << "    movl %eax, " << params[0] << "\n";
         break;
 
     case bit_or:
         // bit_or: params[0] = dest, params[1] = gauche, params[2] = droite
-        o << "    movl " << p1 << ", %eax\n";
-        o << "    orl " << p2 << ", %eax\n";
-        o << "    movl %eax, " << p0 << "\n";
+        o << "    movl " << params[1] << ", %eax\n";
+        o << "    orl " << params[2] << ", %eax\n";
+        o << "    movl %eax, " << params[0] << "\n";
         break;
 
     case bit_xor:
         // bit_xor: params[0] = dest, params[1] = gauche, params[2] = droite
-        o << "    movl " << p1 << ", %eax\n";
-        o << "    xorl " << p2 << ", %eax\n";
-        o << "    movl %eax, " << p0 << "\n";
+        o << "    movl " << params[1] << ", %eax\n";
+        o << "    xorl " << params[2] << ", %eax\n";
+        o << "    movl %eax, " << params[0] << "\n";
         break;
     
     case unary_minus:
         // unary_minus: params[0] = dest, params[1] = source
-        o << "    movl " << p1 << ", %eax\n";
+        o << "    movl " << params[1] << ", %eax\n";
         o << "    negl %eax\n";
-        o << "    movl %eax, " << p0 << "\n";
+        o << "    movl %eax, " << params[0] << "\n";
         break;
 
     case not_op:
         // not_op: params[0] = dest, params[1] = source
-        o << "    cmpl $0, " << p1 << "\n";
+        o << "    movl " << params[1] << ", %eax\n";
+        o << "    cmpl $0, %eax\n";
         o << "    sete %al\n";
         o << "    movzbl %al, %eax\n";
+        o << "    movl %eax, " << params[0] << "\n";
         break;
 
     case rmem:
         // rmem: params[0] = destination, params[1] = adresse
-        o << "    movl " << p1 << ", %eax\n";
+        o << "    movl " << params[1] << ", %eax\n";
         o << "    movl (%eax), %eax\n";
-        o << "    movl %eax, " << p0 << "\n";
+        o << "    movl %eax, " << params[0] << "\n";
         break;
 
     case wmem:
         // wmem: params[0] = adresse, params[1] = valeur
-        o << "    movl " << p1 << ", %eax\n";
-        o << "    movl " << p0 << ", %edx\n";
+        o << "    movl " << params[1] << ", %eax\n";
+        o << "    movl " << params[0] << ", %edx\n";
         o << "    movl %eax, (%edx)\n";
         break;
 
     case call:
         // call: params[0] = label, params[1] = destination, params[2]... = paramètres
         o << "    call " << params[0] << "\n";
-        o << "    movl %eax, " << p1 << "\n";
+        o << "    movl %eax, " << params[1] << "\n";
         break;
 
     default:
@@ -182,7 +181,13 @@ BasicBlock::BasicBlock(CFG *cfg, std::string entry_label)
 
 void BasicBlock::add_IRInstr(IRInstr::Operation op, VarType t, std::vector<std::string> params)
 {
-    IRInstr *instr = new IRInstr(this, op, t, params);
+    std::string p0 = (op == IRInstr::Operation::call) ? params[0] : cfg->IR_reg_to_asm(params[0]);
+    std::string p1 = params.size() >= 2 ? cfg->IR_reg_to_asm(params[1]) : "";
+    std::string p2 = params.size() >= 3 ? cfg->IR_reg_to_asm(params[2]) : "";
+
+    std::vector<std::string> paramsRealAddr = {p0, p1, p2};
+
+    IRInstr *instr = new IRInstr(this, op, t, paramsRealAddr);
     instrs.push_back(instr);
 }
 
@@ -240,7 +245,7 @@ void CFG::gen_asm(std::ostream &o)
 std::string CFG::IR_reg_to_asm(std::string& reg)
 {
     // Utilise la table des symboles pour obtenir l'index et calcule l'offset mémoire.
-    Symbol* p = currentScope->findVariableThisScope(reg);
+    Symbol* p = currentScope->findVariable(reg);
     if (p != nullptr)
     {
         return "-" + to_string(p->offset) + "(%rbp)";

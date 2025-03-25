@@ -1,4 +1,5 @@
 #include "SymbolTable.h"
+#include <iomanip>
 
 SymbolTable::SymbolTable( int initialOffset ) {
     table = std::map<std::string, Symbol>();
@@ -68,4 +69,32 @@ VarType SymbolTable::getType( std::string strType ) {
     if (strType == "char") return VarType::CHAR;
     std::cerr << "error: unknown type " << strType << std::endl;
     exit(1);
+}
+
+void SymbolTable::printTable() {
+    std::cout << "================== Symbol Table ==================" << std::endl;
+    std::cout << "| Name       | Type   | Scope           | Offset |" << std::endl;
+    std::cout << "------------------------------------------------" << std::endl;
+    
+    for (const auto& entry : table) {
+        std::string varName = entry.first;
+        Symbol symbol = entry.second;
+        
+        std::string typeStr = (symbol.type == INT) ? "INT" : "CHAR";
+        
+        std::string scopeStr;
+        switch (symbol.scopeType) {
+            case GLOBAL: scopeStr = "GLOBAL"; break;
+            case FUNCTION_PARAMS: scopeStr = "FUNCTION_PARAMS"; break;
+            case BLOCK: scopeStr = "BLOCK"; break;
+        }
+        
+        std::cout << "| " << std::setw(10) << std::left << varName 
+                  << " | " << std::setw(6) << std::left << typeStr
+                  << " | " << std::setw(15) << std::left << scopeStr
+                  << " | " << std::setw(6) << std::left << symbol.offset 
+                  << " |" << std::endl;
+    }
+    
+    std::cout << "================================================" << std::endl;
 }
