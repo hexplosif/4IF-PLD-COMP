@@ -135,3 +135,26 @@ antlrcpp::Any CodeGenVisitor::visitParenthesisExpression(ifccParser::Parenthesis
 {
     return this->visit(ctx->expr());
 }
+
+antlrcpp::Any CodeGenVisitor::visitComparisonExpression(ifccParser::ComparisonExpressionContext *ctx)
+{
+    // expr op=('=='|'<'|'<='|'>'|'>=') expr
+    string left = this->visit(ctx->expr(0)).as<string>();
+    string right = this->visit(ctx->expr(1)).as<string>();
+    string temp = cfg->create_new_tempvar(Type::INT);
+    string op = ctx->op->getText();
+    if(op == "==") {
+        cfg->current_bb->add_IRInstr(IRInstr::cmp_eq, Type::INT, {temp, left, right});
+    } else if (op == "!=") {
+        cfg->current_bb->add_IRInstr(IRInstr::cmp_ne, Type::INT, {temp, left, right});
+    } else if(op == "<") {
+        cfg->current_bb->add_IRInstr(IRInstr::cmp_lt, Type::INT, {temp, left, right});
+    } else if(op == "<=") {
+        cfg->current_bb->add_IRInstr(IRInstr::cmp_le, Type::INT, {temp, left, right});
+    } else if(op == ">") {
+        cfg->current_bb->add_IRInstr(IRInstr::cmp_gt, Type::INT, {temp, left, right});
+    } else if(op == ">=") {
+        cfg->current_bb->add_IRInstr(IRInstr::cmp_ge, Type::INT, {temp, left, right});
+    }
+    return temp;
+}
