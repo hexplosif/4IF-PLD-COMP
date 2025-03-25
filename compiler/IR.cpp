@@ -117,6 +117,20 @@ void IRInstr::gen_asm(std::ostream &o)
         o << "    xorl " << bb->cfg->IR_reg_to_asm(params[2]) << ", %eax\n";
         o << "    movl %eax, " << bb->cfg->IR_reg_to_asm(params[0]) << "\n";
         break;
+    
+    case unary_minus:
+        // unary_minus: params[0] = dest, params[1] = source
+        o << "    movl " << bb->cfg->IR_reg_to_asm(params[1]) << ", %eax\n";
+        o << "    negl %eax\n";
+        o << "    movl %eax, " << bb->cfg->IR_reg_to_asm(params[0]) << "\n";
+        break;
+
+    case not_op:
+        // not_op: params[0] = dest, params[1] = source
+        o << "    cmpl $0, " << bb->cfg->IR_reg_to_asm(params[1]) << "\n";
+        o << "    sete %al\n";
+        o << "    movzbl %al, %eax\n";
+        break;
 
     case rmem:
         // rmem: params[0] = destination, params[1] = adresse

@@ -20,7 +20,7 @@ assign_stmt : VAR '=' expr ';' ;         // Affectation
 return_stmt : 'return' expr ';' ;         // On retourne une expression
 
 expr
-    : op=('-'|'!') expr                             # UnaryLogicalNotExpression
+    : op=('-'|'!') expr                             # UnaryExpression
     | expr OPM expr                                 # MulDivExpression
     | expr op=('+'|'-') expr                        # AddSubExpression
     | expr op=('=='|'!='|'<'|'>'|'<='|'>=') expr    # ComparisonExpression

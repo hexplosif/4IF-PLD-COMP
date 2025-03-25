@@ -37,7 +37,9 @@ public:
         cmp_ge,
         bit_and,
         bit_or,
-        bit_xor
+        bit_xor,
+        unary_minus,
+        not_op
     } Operation;
 
     /**  constructor */

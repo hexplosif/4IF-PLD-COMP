@@ -175,3 +175,17 @@ antlrcpp::Any CodeGenVisitor::visitBitwiseExpression(ifccParser::BitwiseExpressi
     }
     return temp;
 }
+
+antlrcpp::Any CodeGenVisitor::visitUnaryExpression(ifccParser::UnaryExpressionContext *ctx)
+{
+    // op=('-'|'!') expr
+    string expr = this->visit(ctx->expr()).as<string>();
+    string temp = cfg->create_new_tempvar(Type::INT);
+    string op = ctx->op->getText();
+    if(op == "-") {
+        cfg->current_bb->add_IRInstr(IRInstr::unary_minus, Type::INT, {temp, expr});
+    } else if(op == "!") {
+        cfg->current_bb->add_IRInstr(IRInstr::not_op, Type::INT, {temp, expr});
+    }
+    return temp;
+}
