@@ -86,7 +86,7 @@ void IRInstr::gen_asm(std::ostream &o)
         o << "    movzbl %al, %eax\n";
         o << "    movl %eax, " << bb->cfg->IR_reg_to_asm(params[0]) << "\n";
         break;
-    
+
     case cmp_ne:
         // cmp_ne: params[0] = dest, params[1] = gauche, params[2] = droite
         o << "    movl " << bb->cfg->IR_reg_to_asm(params[1]) << ", %eax\n";
@@ -95,7 +95,7 @@ void IRInstr::gen_asm(std::ostream &o)
         o << "    movzbl %al, %eax\n";
         o << "    movl %eax, " << bb->cfg->IR_reg_to_asm(params[0]) << "\n";
         break;
-    
+
     case cmp_gt:
         // cmp_gt: params[0] = dest, params[1] = gauche, params[2] = droite
         o << "    movl " << bb->cfg->IR_reg_to_asm(params[1]) << ", %eax\n";
@@ -134,7 +134,7 @@ void IRInstr::gen_asm(std::ostream &o)
         o << "    xorl " << bb->cfg->IR_reg_to_asm(params[2]) << ", %eax\n";
         o << "    movl %eax, " << bb->cfg->IR_reg_to_asm(params[0]) << "\n";
         break;
-    
+
     case unary_minus:
         // unary_minus: params[0] = dest, params[1] = source
         o << "    movl " << bb->cfg->IR_reg_to_asm(params[1]) << ", %eax\n";
@@ -168,7 +168,6 @@ void IRInstr::gen_asm(std::ostream &o)
     case call:
         // call: params[0] = label, params[1] = destination, params[2]... = paramètres
         o << "    call " << params[0] << "\n";
-        o << "    movl %eax, " << bb->cfg->IR_reg_to_asm(params[1]) << "\n";
         break;
 
     default:
@@ -219,7 +218,7 @@ void CFG::add_bb(BasicBlock *bb)
 
 void CFG::gen_asm(std::ostream &o)
 {
-    o << ".global main\n";  // Ajoute cette ligne pour rendre main visible
+    o << ".global main\n"; // Ajoute cette ligne pour rendre main visible
     for (size_t i = 0; i < bbs.size(); i++)
     {
         if (i == 0)
@@ -234,7 +233,11 @@ void CFG::gen_asm(std::ostream &o)
 
 std::string CFG::IR_reg_to_asm(std::string reg)
 {
-    // Utilise la table des symboles pour obtenir l'index et calcule l'offset mémoire.
+    // Si le nom commence par '%' on considère que c'est un registre explicite et on le renvoie tel quel.
+    if (!reg.empty() && reg[0] == '%')
+        return reg;
+        
+    // Sinon, utilise la table des symboles pour obtenir l'index et calcule l'offset mémoire.
     int idx = symbolTable.getSymbolIndex(reg);
     if (idx < 0)
     {
@@ -243,6 +246,7 @@ std::string CFG::IR_reg_to_asm(std::string reg)
     }
     return "-" + std::to_string(idx + 4) + "(%rbp)";
 }
+
 
 void CFG::gen_asm_prologue(std::ostream &o)
 {
