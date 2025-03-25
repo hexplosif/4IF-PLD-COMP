@@ -51,7 +51,7 @@ antlrcpp::Any CodeGenVisitor::visitDeclarationStatement(ifccParser::DeclarationS
         cfg->add_to_symbol_table(varName, t);
         if(sub->expr()) {
             // Évalue l'expression et récupère le nom de la variable temporaire contenant le résultat
-            string res = this->visit(sub->expr()).as<string>();
+            string res = any_cast<string>(this->visit(sub->expr()));
             cfg->current_bb->add_IRInstr(IRInstr::copy, t, {varName, res});
         }
     }
@@ -64,7 +64,7 @@ antlrcpp::Any CodeGenVisitor::visitAssignmentStatement(ifccParser::AssignmentSta
     auto assign = ctx->assign_stmt();
     string varName = assign->VAR()->getText();
     // On suppose que la variable a déjà été déclarée
-    string exprResult = this->visit(assign->expr()).as<string>();
+    string exprResult = any_cast<string>(this->visit(assign->expr()));
     cfg->current_bb->add_IRInstr(IRInstr::copy, Type::INT, {varName, exprResult});
     return 0;
 }
@@ -73,7 +73,7 @@ antlrcpp::Any CodeGenVisitor::visitReturn_stmt(ifccParser::Return_stmtContext *c
 {
     // return_stmt : 'return' expr ';'
     // Évalue l'expression de retour
-    string exprResult = this->visit(ctx->expr()).as<string>();
+    string exprResult = any_cast<string>(this->visit(ctx->expr()));
     // Pour la gestion du retour, on copie le résultat dans une variable spéciale "ret".
     cfg->current_bb->add_IRInstr(IRInstr::copy, Type::INT, {"ret", exprResult});
     return exprResult;
@@ -82,8 +82,8 @@ antlrcpp::Any CodeGenVisitor::visitReturn_stmt(ifccParser::Return_stmtContext *c
 antlrcpp::Any CodeGenVisitor::visitAddSubExpression(ifccParser::AddSubExpressionContext *ctx)
 {
     // expr op=('+'|'-') expr
-    string left = this->visit(ctx->expr(0)).as<string>();
-    string right = this->visit(ctx->expr(1)).as<string>();
+    string left = any_cast<string>(this->visit(ctx->expr(0)));
+    string right = any_cast<string>(this->visit(ctx->expr(1)));
     string temp = cfg->create_new_tempvar(Type::INT);
     string op = ctx->op->getText();
     if(op == "+") {
@@ -97,8 +97,8 @@ antlrcpp::Any CodeGenVisitor::visitAddSubExpression(ifccParser::AddSubExpression
 antlrcpp::Any CodeGenVisitor::visitMulDivExpression(ifccParser::MulDivExpressionContext *ctx)
 {
     // expr OPM expr – pour l'instant, seule la multiplication est supportée.
-    string left = this->visit(ctx->expr(0)).as<string>();
-    string right = this->visit(ctx->expr(1)).as<string>();
+    string left = any_cast<string>(this->visit(ctx->expr(0)));
+    string right = any_cast<string>(this->visit(ctx->expr(1)));
     string temp = cfg->create_new_tempvar(Type::INT);
     string op = ctx->OPM()->getText();
     if(op == "*") {
@@ -137,8 +137,8 @@ antlrcpp::Any CodeGenVisitor::visitParenthesisExpression(ifccParser::Parenthesis
 antlrcpp::Any CodeGenVisitor::visitComparisonExpression(ifccParser::ComparisonExpressionContext *ctx)
 {
     // expr op=('=='|'<'|'<='|'>'|'>=') expr
-    string left = this->visit(ctx->expr(0)).as<string>();
-    string right = this->visit(ctx->expr(1)).as<string>();
+    string left = any_cast<string>(this->visit(ctx->expr(0)));
+    string right = any_cast<string>(this->visit(ctx->expr(1)));
     string temp = cfg->create_new_tempvar(Type::INT);
     string op = ctx->op->getText();
     if(op == "==") {
@@ -160,8 +160,8 @@ antlrcpp::Any CodeGenVisitor::visitComparisonExpression(ifccParser::ComparisonEx
 antlrcpp::Any CodeGenVisitor::visitBitwiseExpression(ifccParser::BitwiseExpressionContext *ctx)
 {
     // expr op=('&'|'|'|'^') expr
-    string left = this->visit(ctx->expr(0)).as<string>();
-    string right = this->visit(ctx->expr(1)).as<string>();
+    string left = any_cast<string>(this->visit(ctx->expr(0)));
+    string right = any_cast<string>(this->visit(ctx->expr(1)));
     string temp = cfg->create_new_tempvar(Type::INT);
     string op = ctx->op->getText();
     if(op == "&") {
@@ -177,7 +177,7 @@ antlrcpp::Any CodeGenVisitor::visitBitwiseExpression(ifccParser::BitwiseExpressi
 antlrcpp::Any CodeGenVisitor::visitUnaryExpression(ifccParser::UnaryExpressionContext *ctx)
 {
     // op=('-'|'!') expr
-    string expr = this->visit(ctx->expr()).as<string>();
+    string expr = any_cast<string>(this->visit(ctx->expr()));
     string temp = cfg->create_new_tempvar(Type::INT);
     string op = ctx->op->getText();
     if(op == "-") {
