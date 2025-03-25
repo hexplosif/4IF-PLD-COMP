@@ -105,12 +105,10 @@ antlrcpp::Any CodeGenVisitor::visitMulDivExpression(ifccParser::MulDivExpression
         cfg->current_bb->add_IRInstr(IRInstr::mul, Type::INT, {temp, left, right});
     }
     else if(op == "/") {
-        // Pour simplifier, on ne gère pas la division ici.
-        cfg->current_bb->add_IRInstr(IRInstr::copy, Type::INT, {temp, left});
+        cfg->current_bb->add_IRInstr(IRInstr::div, Type::INT, {temp, left, right});
     }
     else if(op == "%") {
-        // Non implémenté.
-        cfg->current_bb->add_IRInstr(IRInstr::copy, Type::INT, {temp, left});
+        cfg->current_bb->add_IRInstr(IRInstr::mod, Type::INT, {temp, left, right});
     }
     return temp;
 }
