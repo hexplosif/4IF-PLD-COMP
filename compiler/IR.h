@@ -34,7 +34,10 @@ public:
         cmp_lt,
         cmp_le,
         cmp_gt,
-        cmp_ge
+        cmp_ge,
+        bit_and,
+        bit_or,
+        bit_xor
     } Operation;
 
     /**  constructor */

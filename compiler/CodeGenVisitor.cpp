@@ -158,3 +158,20 @@ antlrcpp::Any CodeGenVisitor::visitComparisonExpression(ifccParser::ComparisonEx
     }
     return temp;
 }
+
+antlrcpp::Any CodeGenVisitor::visitBitwiseExpression(ifccParser::BitwiseExpressionContext *ctx)
+{
+    // expr op=('&'|'|'|'^') expr
+    string left = this->visit(ctx->expr(0)).as<string>();
+    string right = this->visit(ctx->expr(1)).as<string>();
+    string temp = cfg->create_new_tempvar(Type::INT);
+    string op = ctx->op->getText();
+    if(op == "&") {
+        cfg->current_bb->add_IRInstr(IRInstr::bit_and, Type::INT, {temp, left, right});
+    } else if(op == "|") {
+        cfg->current_bb->add_IRInstr(IRInstr::bit_or, Type::INT, {temp, left, right});
+    } else if(op == "^") {
+        cfg->current_bb->add_IRInstr(IRInstr::bit_xor, Type::INT, {temp, left, right});
+    }
+    return temp;
+}

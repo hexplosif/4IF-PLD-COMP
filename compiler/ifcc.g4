@@ -25,9 +25,7 @@ expr
     | expr op=('+'|'-') expr                        # AddSubExpression
     | expr op=('=='|'!='|'<'|'>'|'<='|'>=') expr    # ComparisonExpression
     | expr op=('||'|'&&') expr                      # LogiqueParesseuxExpression
-    | expr '&' expr                                 # BitwiseAndExpression
-    | expr '^' expr                                 # BitwiseXorExpression
-    | expr '|' expr                                 # BitwiseOrExpression
+    | expr op=('&'|'^'|'|') expr                    # BitwiseExpression
     | '(' expr ')'                                  # ParenthesisExpression
     | VAR '(' (expr (',' expr)*)? ')'               # FunctionCallExpression
     | VAR                                           # VariableExpression

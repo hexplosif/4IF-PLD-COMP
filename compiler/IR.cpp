@@ -97,18 +97,41 @@ void IRInstr::gen_asm(std::ostream &o)
         o << "    movl %eax, " << bb->cfg->IR_reg_to_asm(params[0]) << "\n";
         break;
 
+    case bit_and:
+        // bit_and: params[0] = dest, params[1] = gauche, params[2] = droite
+        o << "    movl " << bb->cfg->IR_reg_to_asm(params[1]) << ", %eax\n";
+        o << "    andl " << bb->cfg->IR_reg_to_asm(params[2]) << ", %eax\n";
+        o << "    movl %eax, " << bb->cfg->IR_reg_to_asm(params[0]) << "\n";
+        break;
+
+    case bit_or:
+        // bit_or: params[0] = dest, params[1] = gauche, params[2] = droite
+        o << "    movl " << bb->cfg->IR_reg_to_asm(params[1]) << ", %eax\n";
+        o << "    orl " << bb->cfg->IR_reg_to_asm(params[2]) << ", %eax\n";
+        o << "    movl %eax, " << bb->cfg->IR_reg_to_asm(params[0]) << "\n";
+        break;
+
+    case bit_xor:
+        // bit_xor: params[0] = dest, params[1] = gauche, params[2] = droite
+        o << "    movl " << bb->cfg->IR_reg_to_asm(params[1]) << ", %eax\n";
+        o << "    xorl " << bb->cfg->IR_reg_to_asm(params[2]) << ", %eax\n";
+        o << "    movl %eax, " << bb->cfg->IR_reg_to_asm(params[0]) << "\n";
+        break;
+
     case rmem:
         // rmem: params[0] = destination, params[1] = adresse
         o << "    movl " << bb->cfg->IR_reg_to_asm(params[1]) << ", %eax\n";
         o << "    movl (%eax), %eax\n";
         o << "    movl %eax, " << bb->cfg->IR_reg_to_asm(params[0]) << "\n";
         break;
+
     case wmem:
         // wmem: params[0] = adresse, params[1] = valeur
         o << "    movl " << bb->cfg->IR_reg_to_asm(params[1]) << ", %eax\n";
         o << "    movl " << bb->cfg->IR_reg_to_asm(params[0]) << ", %edx\n";
         o << "    movl %eax, (%edx)\n";
         break;
+
     case call:
         // call: params[0] = label, params[1] = destination, params[2]... = paramètres
         o << "    call " << params[0] << "\n";

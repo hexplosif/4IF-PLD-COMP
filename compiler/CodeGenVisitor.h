@@ -16,4 +16,5 @@ public:
     virtual antlrcpp::Any visitVariableExpression(ifccParser::VariableExpressionContext *ctx) override;
     virtual antlrcpp::Any visitParenthesisExpression(ifccParser::ParenthesisExpressionContext *ctx) override;
     virtual antlrcpp::Any visitComparisonExpression(ifccParser::ComparisonExpressionContext *ctx) override;
+    virtual antlrcpp::Any visitBitwiseExpression(ifccParser::BitwiseExpressionContext *ctx) override;
 };
