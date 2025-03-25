@@ -31,11 +31,14 @@ antlrcpp::Any CodeGenVisitor::visitProg(ifccParser::ProgContext *ctx)
 
 antlrcpp::Any CodeGenVisitor::visitBlock(ifccParser::BlockContext *ctx)
 {
-    for(auto stmt : ctx->stmt()) {
+    for (auto stmt : ctx->stmt()) {
+        if (cfg->current_bb == nullptr)
+            break; // Un return a été rencontré : on arrête le traitement du bloc.
         this->visit(stmt);
     }
     return 0;
 }
+
 
 antlrcpp::Any CodeGenVisitor::visitDeclarationStatement(ifccParser::DeclarationStatementContext *ctx)
 {
@@ -71,11 +74,14 @@ antlrcpp::Any CodeGenVisitor::visitAssignmentStatement(ifccParser::AssignmentSta
 
 antlrcpp::Any CodeGenVisitor::visitReturn_stmt(ifccParser::Return_stmtContext *ctx)
 {
-    // return_stmt : 'return' expr ';'
     // Évalue l'expression de retour
-    string exprResult = any_cast<string>(this->visit(ctx->expr()));
-    // Pour la gestion du retour, on copie le résultat dans une variable spéciale "ret".
+    std::string exprResult = any_cast<std::string>(this->visit(ctx->expr()));
+    // Copie le résultat dans la variable spéciale "ret"
     cfg->current_bb->add_IRInstr(IRInstr::copy, Type::INT, {"ret", exprResult});
+    // Ajoute un saut vers l'épilogue
+    cfg->current_bb->add_IRInstr(IRInstr::jmp, Type::INT, {".Lepilogue"});
+    // Marquer le bloc courant comme terminé en le vidant (ou en le désactivant)
+    cfg->current_bb = nullptr; // On n'ajoutera plus d'instructions dans ce bloc.
     return exprResult;
 }
 

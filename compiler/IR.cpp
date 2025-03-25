@@ -170,6 +170,11 @@ void IRInstr::gen_asm(std::ostream &o)
         o << "    call " << params[0] << "\n";
         break;
 
+    case jmp:
+        // jmp: params[0] = label
+        o << "    jmp " << params[0] << "\n";
+        break;
+
     default:
         o << "    # Opération IR non supportée\n";
         break;
@@ -218,7 +223,7 @@ void CFG::add_bb(BasicBlock *bb)
 
 void CFG::gen_asm(std::ostream &o)
 {
-    o << ".global main\n"; // Ajoute cette ligne pour rendre main visible
+    o << ".global main\n";  // Rendre main visible
     for (size_t i = 0; i < bbs.size(); i++)
     {
         if (i == 0)
@@ -228,8 +233,11 @@ void CFG::gen_asm(std::ostream &o)
         }
         bbs[i]->gen_asm(o);
     }
+    // Ajoute la définition du label de l'épilogue
+    o << ".Lepilogue:\n";
     gen_asm_epilogue(o);
 }
+
 
 std::string CFG::IR_reg_to_asm(std::string reg)
 {

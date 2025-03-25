@@ -41,7 +41,8 @@ public:
         bit_xor,
         unary_minus,
         not_op,
-        call
+        call,
+        jmp
     } Operation;
 
     /**  constructor */
