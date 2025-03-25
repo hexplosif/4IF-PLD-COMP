@@ -28,8 +28,7 @@ public:
         div,
         mod,
         rmem,
-        wmem,
-        call, 
+        wmem, 
         cmp_eq,
         cmp_ne,
         cmp_lt,
@@ -40,7 +39,9 @@ public:
         bit_or,
         bit_xor,
         unary_minus,
-        not_op
+        not_op,
+        call,
+        jmp
     } Operation;
 
     /**  constructor */

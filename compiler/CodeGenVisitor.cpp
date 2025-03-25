@@ -46,7 +46,9 @@ antlrcpp::Any CodeGenVisitor::visitBlock(ifccParser::BlockContext *ctx)
     cfg->add_bb(bb);
 
     // Visiter les statements
-    for(auto stmt : ctx->stmt()) {
+    for (auto stmt : ctx->stmt()) {
+        if (cfg->current_bb == nullptr)
+            break; // Un return a été rencontré : on arrête le traitement du bloc.
         this->visit(stmt);
     }
 
@@ -109,11 +111,14 @@ antlrcpp::Any CodeGenVisitor::visitAssignmentStatement(ifccParser::AssignmentSta
 
 antlrcpp::Any CodeGenVisitor::visitReturn_stmt(ifccParser::Return_stmtContext *ctx)
 {
-    // return_stmt : 'return' expr ';'
     // Évalue l'expression de retour
-    string exprResult = any_cast<string>(this->visit(ctx->expr()));
-    // Pour la gestion du retour, on copie le résultat dans une variable spéciale "ret".
+    std::string exprResult = any_cast<std::string>(this->visit(ctx->expr()));
+    // Copie le résultat dans la variable spéciale "ret" ("ret" ne marche pas avec LINUX)
     cfg->current_bb->add_IRInstr(IRInstr::copy, VarType::INT, {"%eax", exprResult});
+    // Ajoute un saut vers l'épilogue
+    cfg->current_bb->add_IRInstr(IRInstr::jmp, VarType::INT, {".Lepilogue"});
+    // Marquer le bloc courant comme terminé en le vidant (ou en le désactivant)
+    cfg->current_bb = nullptr; // On n'ajoutera plus d'instructions dans ce bloc.
     return exprResult;
 }
 
@@ -167,10 +172,11 @@ antlrcpp::Any CodeGenVisitor::visitConstantExpression(ifccParser::ConstantExpres
 antlrcpp::Any CodeGenVisitor::visitConstantCharExpression(ifccParser::ConstantCharExpressionContext *ctx)
 {
     // Traitement des constantes de type char (par exemple, 'a')
-    string value = ctx->CONST_CHAR()->getText();
+    string value = ctx->CONST_CHAR()->getText().substr(1, 1);
+    int ascii = (int)value[0];
     // Crée une variable temporaire et charge la constante dedans.
     string temp = cfg->currentScope->addTempVariable("char");
-    cfg->current_bb->add_IRInstr(IRInstr::ldconst, VarType::CHAR, {temp, value});
+    cfg->current_bb->add_IRInstr(IRInstr::ldconst, VarType::CHAR, {temp, to_string(ascii)});
     return temp;
 }
 
@@ -244,5 +250,44 @@ antlrcpp::Any CodeGenVisitor::visitUnaryExpression(ifccParser::UnaryExpressionCo
     } else if(op == "!") {
         cfg->current_bb->add_IRInstr(IRInstr::not_op, VarType::INT, {temp, expr});
     }
+    return temp;
+}
+
+antlrcpp::Any CodeGenVisitor::visitFunctionCallExpression(ifccParser::FunctionCallExpressionContext *ctx)
+{
+    // Get the function name from the VAR token
+    std::string funcName = ctx->VAR()->getText();
+
+    // Get the list of argument expressions
+    auto args = ctx->expr();
+
+    // Check if the function call has more than 6 arguments.
+    if (args.size() > 6)
+    {
+        std::cerr << "Error: function call with more than 6 arguments not supported." << std::endl;
+        exit(1);
+    }
+
+    // Evaluate each argument and move the result into the appropriate register.
+    // According to the Linux System V AMD64 ABI, the first six integer arguments go in:
+    // 1st: %rdi, 2nd: %rsi, 3rd: %rdx, 4th: %rcx, 5th: %r8, 6th: %r9.
+    // Here we assume that the result of an expression is left in %eax, so we move
+    // that 32-bit value into the corresponding register (using the "d" suffix for the lower 32 bits).
+
+    std::vector<std::string> argRegs = {"%edi", "%esi", "%edx", "%ecx", "%r8d", "%r9d"};
+
+    for (size_t i = 0; i < args.size(); i++)
+    {
+        std::string arg = any_cast<std::string>(this->visit(args[i]));
+        cfg->current_bb->add_IRInstr(IRInstr::copy, VarType::INT, {argRegs[i], arg});
+    }
+
+    // Call the function
+    cfg->current_bb->add_IRInstr(IRInstr::call, VarType::INT, {funcName});
+
+    // The result of the function call is left in %eax, so we move it to a temporary variable.
+    string temp = cfg->currentScope->addTempVariable("int");
+    cfg->current_bb->add_IRInstr(IRInstr::copy, VarType::INT, {temp, "%eax"});
+
     return temp;
 }

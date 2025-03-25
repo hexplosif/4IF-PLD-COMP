@@ -81,7 +81,7 @@ void IRInstr::gen_asm(std::ostream &o)
         o << "    movzbl %al, %eax\n";
         o << "    movl %eax, " << params[0] << "\n";
         break;
-    
+
     case cmp_ne:
         // cmp_ne: params[0] = dest, params[1] = gauche, params[2] = droite
         o << "    movl " << params[1] << ", %eax\n";
@@ -90,7 +90,7 @@ void IRInstr::gen_asm(std::ostream &o)
         o << "    movzbl %al, %eax\n";
         o << "    movl %eax, " << params[0] << "\n";
         break;
-    
+
     case cmp_gt:
         // cmp_gt: params[0] = dest, params[1] = gauche, params[2] = droite
         o << "    movl " << params[1] << ", %eax\n";
@@ -129,7 +129,7 @@ void IRInstr::gen_asm(std::ostream &o)
         o << "    xorl " << params[2] << ", %eax\n";
         o << "    movl %eax, " << params[0] << "\n";
         break;
-    
+
     case unary_minus:
         // unary_minus: params[0] = dest, params[1] = source
         o << "    movl " << params[1] << ", %eax\n";
@@ -166,6 +166,11 @@ void IRInstr::gen_asm(std::ostream &o)
         o << "    movl %eax, " << params[1] << "\n";
         break;
 
+    case jmp:
+        // jmp: params[0] = label
+        o << "    jmp " << params[0] << "\n";
+        break;
+
     default:
         o << "    # Opération IR non supportée\n";
         break;
@@ -181,7 +186,8 @@ BasicBlock::BasicBlock(CFG *cfg, std::string entry_label)
 
 void BasicBlock::add_IRInstr(IRInstr::Operation op, VarType t, std::vector<std::string> params)
 {
-    std::string p0 = (op == IRInstr::Operation::call) ? params[0] : cfg->IR_reg_to_asm(params[0]);
+    bool needFindAdd = (op == IRInstr::Operation::call || op == IRInstr::Operation::jmp);
+    std::string p0 = needFindAdd ? params[0] : cfg->IR_reg_to_asm(params[0]);
     std::string p1 = params.size() >= 2 ? cfg->IR_reg_to_asm(params[1]) : "";
     std::string p2 = params.size() >= 3 ? cfg->IR_reg_to_asm(params[2]) : "";
 
@@ -228,7 +234,7 @@ void CFG::add_bb(BasicBlock *bb)
 
 void CFG::gen_asm(std::ostream &o)
 {
-    o << ".global main\n";  // Ajoute cette ligne pour rendre main visible
+    o << ".global main\n";  // Rendre main visible
     for (size_t i = 0; i < bbs.size(); i++)
     {
         if (i == 0)
@@ -252,6 +258,7 @@ std::string CFG::IR_reg_to_asm(std::string& reg)
     }
     return reg;
 }
+
 
 void CFG::gen_asm_prologue(std::ostream &o)
 {
