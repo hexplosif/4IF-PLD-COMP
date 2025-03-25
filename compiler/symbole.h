@@ -1,7 +1,22 @@
 #ifndef SYMBOLE_H
 #define SYMBOLE_H
 
-// Pour cette implémentation minimaliste, ce fichier est laissé vide.
-// Vous pourrez y ajouter d’autres définitions si besoin.
+enum VarType {
+    INT,
+    CHAR
+};
+
+enum ScopeType {
+    GLOBAL,
+    FUNCTION_PARAMS,
+    BLOCK
+};
+
+struct Symbol
+{
+    VarType type;
+    int offset;
+    ScopeType scopeType;
+};
 
 #endif

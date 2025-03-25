@@ -1,19 +1,71 @@
 #include "SymbolTable.h"
 
-SymbolTable::SymbolTable() : nextIndex(0) {}
+SymbolTable::SymbolTable( int initialOffset ) {
+    table = std::map<std::string, Symbol>();
+    parent = nullptr;
+    this->currentDeclOffset = initialOffset;
+}
 
-void SymbolTable::addSymbol(const std::string &name) {
-    // On ajoute la variable uniquement si elle n'est pas déjà présente
-    if (table.find(name) == table.end()) {
-        table[name] = nextIndex;
-        nextIndex += 4; // On incrémente par 4 pour respecter des index multiples de 4 (entiers 32 bits)
+Symbol SymbolTable::addLocalVariable(std::string name, std::string type) {
+    if (findVariableThisScope(name) == nullptr) {
+        Symbol p = { getType(type) , currentDeclOffset, ScopeType::BLOCK };
+        table[name] = p;
+        currentDeclOffset += 4;
+        return p;
+    } else {
+        std::cerr << "error: variable '" << name << "' has already declared\n";
+        exit(1);
     }
 }
 
-int SymbolTable::getSymbolIndex(const std::string &name) const {
-    auto it = table.find(name);
-    if (it != table.end()) {
-        return it->second;
+Symbol SymbolTable::addGlobalVariable(std::string name, std::string type) {
+    if (findVariableThisScope(name) == nullptr) {
+        Symbol p = { getType(type) , currentDeclOffset, ScopeType::GLOBAL };
+        table[name] = p; 
+        return p;
+    } else {
+        std::cerr << "error: variable '" << name << "' has already declared\n";
+        exit(1);
     }
-    return -1; // Valeur d'erreur si la variable n'est pas trouvée
+}
+
+std::string SymbolTable::addTempVariable(std::string type) {
+    std::string name = "!tmp" + std::to_string(currentDeclOffset);
+    Symbol p = { getType(type) , currentDeclOffset, ScopeType::BLOCK };
+    table[name] = p;
+    currentDeclOffset += 4;
+    return name;
+}
+
+Symbol* SymbolTable::findVariable(std::string name) {
+    SymbolTable *current = this;
+    while (current != nullptr) {
+        if (current->table.find(name) != current->table.end()) {
+            return &current->table[name];
+        }
+        current = current->parent;
+    }
+    return nullptr;
+}
+
+Symbol* SymbolTable::findVariableThisScope(std::string name) {
+    if (table.find(name) != table.end()) {
+        return &table[name];
+    }
+    return nullptr;
+}
+
+void SymbolTable::synchronize(SymbolTable *symbolTable) {
+    currentDeclOffset = symbolTable->currentDeclOffset;
+}
+
+bool SymbolTable::isGlobalScope() {
+    return parent == nullptr;
+}
+
+VarType SymbolTable::getType( std::string strType ) {
+    if (strType == "int") return VarType::INT;
+    if (strType == "char") return VarType::CHAR;
+    std::cerr << "error: unknown type " << strType << std::endl;
+    exit(1);
 }

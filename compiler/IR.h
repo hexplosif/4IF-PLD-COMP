@@ -7,7 +7,6 @@
 #include <iostream>
 #include <initializer_list>
 #include <map>       // Ajout pour std::map
-#include "type.h"
 #include "symbole.h"
 #include "SymbolTable.h"  // Inclure notre table des symboles
 
@@ -26,6 +25,8 @@ public:
         add,
         sub,
         mul,
+		div,
+		rem,
         rmem,
         wmem,
         call, 
@@ -35,7 +36,7 @@ public:
     } Operation;
 
     /**  constructor */
-    IRInstr(BasicBlock* bb_, Operation op, Type t, std::vector<std::string> params);
+    IRInstr(BasicBlock* bb_, Operation op, VarType t, std::vector<std::string> params);
 
     /** Actual code generation */
     void gen_asm(std::ostream &o); /**< x86 assembly code generation for this IR instruction */
@@ -43,7 +44,7 @@ public:
 private:
     BasicBlock* bb; /**< The BB this instruction belongs to, which provides a pointer to the CFG this instruction belongs to */
     Operation op;
-    Type t;
+    VarType t;
     std::vector<std::string> params; /**< For 3-op instrs: d, x, y; for ldconst: d, c;  For call: label, d, params;  for wmem and rmem: choose yourself */
 };
 
@@ -56,7 +57,7 @@ public:
     BasicBlock(CFG* cfg, std::string entry_label);
     void gen_asm(std::ostream &o); /**< x86 assembly code generation for this basic block (very simple) */
 
-    void add_IRInstr(IRInstr::Operation op, Type t, std::vector<std::string> params);
+    void add_IRInstr(IRInstr::Operation op, VarType t, std::vector<std::string> params);
 
     BasicBlock* exit_true;  /**< pointer to the next basic block, true branch. If nullptr, return from procedure */ 
     BasicBlock* exit_false; /**< pointer to the next basic block, false branch. If nullptr, the basic block ends with an unconditional jump */
@@ -78,18 +79,13 @@ public:
     DefFonction* ast; /**< The AST this CFG comes from */
 
     void add_bb(BasicBlock* bb);
+    void set_current_scope(SymbolTable* st) { currentScope = st; }
 
     // x86 code generation: could be encapsulated in a processor class in a retargetable compiler
     void gen_asm(std::ostream& o);
-    std::string IR_reg_to_asm(std::string reg); /**< helper method: inputs a IR reg or input variable, returns e.g. "-24(%rbp)" for the proper value of 24 */
+    std::string IR_reg_to_asm(std::string& reg); /**< helper method: inputs a IR reg or input variable, returns e.g. "-24(%rbp)" for the proper value of 24 */
     void gen_asm_prologue(std::ostream& o);
     void gen_asm_epilogue(std::ostream& o);
-
-    // symbol table methods: désormais déléguées à SymbolTable
-    void add_to_symbol_table(std::string name, Type t);
-    std::string create_new_tempvar(Type t);
-    int get_var_index(std::string name);
-    Type get_var_type(std::string name);
 
     // basic block management
     std::string new_BB_name();
@@ -99,7 +95,7 @@ protected:
     // On remplace ces membres par notre instance de SymbolTable
     // std::map<std::string, Type> SymbolType;
     // std::map<std::string, int> SymbolIndex;
-    SymbolTable symbolTable;
+    SymbolTable* currentScope; /**< the symbol table of the current scope */
 
     int nextFreeSymbolIndex; /**< to allocate new symbols in the symbol table */
     int nextBBnumber; /**< just for naming */

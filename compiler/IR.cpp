@@ -1,6 +1,5 @@
 #include "IR.h"
 #include "SymbolTable.h"
-#include "type.h"
 #include <cstdlib>
 #include <iostream>
 #include <sstream>
@@ -8,7 +7,7 @@ using namespace std;
 
 /* ---------------------- IRInstr ---------------------- */
 
-IRInstr::IRInstr(BasicBlock *bb_, Operation op, Type t, std::vector<std::string> params)
+IRInstr::IRInstr(BasicBlock *bb_, Operation op, VarType t, std::vector<std::string> params)
     : bb(bb_), op(op), t(t), params(params)
 {
 }
@@ -16,34 +15,51 @@ IRInstr::IRInstr(BasicBlock *bb_, Operation op, Type t, std::vector<std::string>
 void IRInstr::gen_asm(std::ostream &o)
 {
     // Pour simplifier, on gère ici ldconst, copy, add, sub et mul.
+    std::string p0 = bb->cfg->IR_reg_to_asm(params[0]);
+
+    std::string p1 = params.size() >= 2 ? bb->cfg->IR_reg_to_asm(params[1]) : "";
+    std::string p2 = params.size() >= 3 ? bb->cfg->IR_reg_to_asm(params[2]) : "";
+
     switch (op)
     {
     case ldconst:
         // ldconst: params[0] = destination, params[1] = constante
-        o << "    movl $" << params[1] << ", " << bb->cfg->IR_reg_to_asm(params[0]) << "\n";
+        o << "    movl $" << p1 << ", " << p0 << "\n";
         break;
     case copy:
         // copy: params[0] = destination, params[1] = source
-        o << "    movl " << bb->cfg->IR_reg_to_asm(params[1]) << ", %eax\n";
-        o << "    movl %eax, " << bb->cfg->IR_reg_to_asm(params[0]) << "\n"; // Stocke le résultat
+        o << "    movl " << p1 << ", %eax\n";
+        o << "    movl %eax, " << p0 << "\n"; // Stocke le résultat
         break;
     
     case add:
         // add: params[0] = dest, params[1] = gauche, params[2] = droite
-        o << "    movl " << bb->cfg->IR_reg_to_asm(params[1]) << ", %eax\n";
-        o << "    addl " << bb->cfg->IR_reg_to_asm(params[2]) << ", %eax\n";
-        o << "    movl %eax, " << bb->cfg->IR_reg_to_asm(params[0]) << "\n";
+        o << "    movl " << p1 << ", %eax\n";
+        o << "    addl " << p2 << ", %eax\n";
+        o << "    movl %eax, " << p0 << "\n";
         break;
     case sub:
-        o << "    movl " << bb->cfg->IR_reg_to_asm(params[1]) << ", %eax\n";
-        o << "    subl " << bb->cfg->IR_reg_to_asm(params[2]) << ", %eax\n";
-        o << "    movl %eax, " << bb->cfg->IR_reg_to_asm(params[0]) << "\n";
+        o << "    movl " << p1 << ", %eax\n";
+        o << "    subl " << p2 << ", %eax\n";
+        o << "    movl %eax, " << p0 << "\n";
         break;
     case mul:
-        o << "    movl " << bb->cfg->IR_reg_to_asm(params[1]) << ", %eax\n";
-        o << "    imull " << bb->cfg->IR_reg_to_asm(params[2]) << ", %eax\n";
-        o << "    movl %eax, " << bb->cfg->IR_reg_to_asm(params[0]) << "\n";
+        o << "    movl " << p1 << ", %eax\n";
+        o << "    imull " << p2 << ", %eax\n";
+        o << "    movl %eax, " << p0 << "\n";
         break;
+    case div:    // params : dest, source1, source2
+        o << "    movl " << p1 << ", %eax\n";
+        o << "    cltd\n";
+        o << "    idivl " << p2 << "\n";
+        o << "    movl %eax, " << p0 << "\n";
+        break;
+    case rem:    // params : dest, source1, source2
+        o << "    movl " << p1 << ", %eax\n";
+        o << "    cltd\n";
+        o << "    idivl " << p2 << "\n";
+        o << "    movl %edx, " << p0 << "\n";
+        break;  
     default:
         o << "    # Opération IR non supportée\n";
         break;
@@ -57,7 +73,7 @@ BasicBlock::BasicBlock(CFG *cfg, std::string entry_label)
 {
 }
 
-void BasicBlock::add_IRInstr(IRInstr::Operation op, Type t, std::vector<std::string> params)
+void BasicBlock::add_IRInstr(IRInstr::Operation op, VarType t, std::vector<std::string> params)
 {
     IRInstr *instr = new IRInstr(this, op, t, params);
     instrs.push_back(instr);
@@ -73,6 +89,8 @@ void BasicBlock::gen_asm(std::ostream &o)
     if (exit_true != nullptr)
     {
         o << "    jmp " << exit_true->label << "\n";
+    } else { // si on est à la fin de cfg (fin de function)
+        cfg->gen_asm_epilogue(o);
     }
 }
 
@@ -80,6 +98,7 @@ void BasicBlock::gen_asm(std::ostream &o)
 
 CFG::CFG(DefFonction *ast) : ast(ast), nextFreeSymbolIndex(0), nextBBnumber(0), current_bb(nullptr)
 {
+    this->ast = ast;
     // Création du bloc d'entrée ("main")
     current_bb = new BasicBlock(this, "main");
     bbs.push_back(current_bb);
@@ -88,6 +107,11 @@ CFG::CFG(DefFonction *ast) : ast(ast), nextFreeSymbolIndex(0), nextBBnumber(0), 
 void CFG::add_bb(BasicBlock *bb)
 {
     bbs.push_back(bb);
+    if (current_bb != nullptr)
+    {
+        current_bb->exit_true = bb;
+    }
+    current_bb = bb;
 }
 
 void CFG::gen_asm(std::ostream &o)
@@ -99,22 +123,22 @@ void CFG::gen_asm(std::ostream &o)
         {
             o << bbs[i]->label << ":\n"; // S'assure que main est bien affiché
             gen_asm_prologue(o);
+        } else {
+            o << bbs[i]->label << ":\n";
         }
         bbs[i]->gen_asm(o);
     }
-    gen_asm_epilogue(o);
 }
 
-std::string CFG::IR_reg_to_asm(std::string reg)
+std::string CFG::IR_reg_to_asm(std::string& reg)
 {
     // Utilise la table des symboles pour obtenir l'index et calcule l'offset mémoire.
-    int idx = symbolTable.getSymbolIndex(reg);
-    if (idx < 0)
+    Symbol* p = currentScope->findVariableThisScope(reg);
+    if (p != nullptr)
     {
-        // En cas d'erreur, on renvoie une adresse factice.
-        return "0(%rbp)";
+        return "-" + to_string(p->offset) + "(%rbp)";
     }
-    return "-" + std::to_string(idx + 4) + "(%rbp)";
+    return reg;
 }
 
 void CFG::gen_asm_prologue(std::ostream &o)
@@ -127,25 +151,6 @@ void CFG::gen_asm_epilogue(std::ostream &o)
 {
     o << "    popq %rbp\n";
     o << "    ret\n";
-}
-
-void CFG::add_to_symbol_table(std::string name, Type t)
-{
-    symbolTable.addSymbol(name);
-}
-
-std::string CFG::create_new_tempvar(Type t)
-{
-    // Génère un nom unique pour une variable temporaire.
-    std::string temp = "t" + std::to_string(nextFreeSymbolIndex);
-    nextFreeSymbolIndex++;
-    symbolTable.addSymbol(temp);
-    return temp;
-}
-
-int CFG::get_var_index(std::string name)
-{
-    return symbolTable.getSymbolIndex(name);
 }
 
 std::string CFG::new_BB_name()

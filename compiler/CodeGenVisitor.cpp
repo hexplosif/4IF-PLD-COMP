@@ -1,6 +1,5 @@
 #include "CodeGenVisitor.h"
 #include "IR.h"
-#include "type.h"
 #include <iostream>
 #include <sstream>
 #include <string>
@@ -31,30 +30,63 @@ antlrcpp::Any CodeGenVisitor::visitProg(ifccParser::ProgContext *ctx)
 
 antlrcpp::Any CodeGenVisitor::visitBlock(ifccParser::BlockContext *ctx)
 {
+    bool isThisFunctionBlock = currentScope->isGlobalScope();
+
+    // TODO: if this block is a function block, we need to create a new cfg for the function
+
+    // Creer un nouveau scope quand on entre un nouveau block
+    SymbolTable *parentScope = currentScope;
+    currentScope = new SymbolTable(parentScope->getCurrentDeclOffset());
+    currentScope->setParent(parentScope);
+    cfg->set_current_scope(currentScope);
+
+    // Créer un nouveau basic block
+    string blockName = cfg->new_BB_name();
+    BasicBlock* bb = new BasicBlock(cfg, blockName);
+    cfg->add_bb(bb);
+
+    // Visiter les statements
     for(auto stmt : ctx->stmt()) {
         this->visit(stmt);
     }
+
+    // le block est finis, on synchronize le parent et ce scope; on revient vers scope de parent
+    currentScope->getParent()->synchronize(currentScope);
+    currentScope = currentScope->getParent();
+
+    if (isThisFunctionBlock) { // si ce bloc est une fonction
+        // Ajouter un bloc de fin pour la fonction
+        BasicBlock* bbEnd = new BasicBlock(cfg, ".Lepilogue");
+        cfg->add_bb(bbEnd);
+    }
+
     return 0;
 }
 
-antlrcpp::Any CodeGenVisitor::visitDeclarationStatement(ifccParser::DeclarationStatementContext *ctx)
+antlrcpp::Any CodeGenVisitor::visitDecl_stmt(ifccParser::Decl_stmtContext *ctx)
 {
-    // Récupération du contexte de la règle decl_stmt
-    auto decl = ctx->decl_stmt();
-    string varType = decl->type()->getText(); // "int" ou "char"
-    Type t = (varType == "int") ? Type::INT : Type::CHAR;
-    
-    // Pour chaque sous-déclaration, on ajoute la variable dans la table des symboles
-    // et, si initialisée, on génère une instruction d'affectation.
-    for (auto sub : decl->sub_decl()) {
-        string varName = sub->VAR()->getText();
-        cfg->add_to_symbol_table(varName, t);
-        if(sub->expr()) {
-            // Évalue l'expression et récupère le nom de la variable temporaire contenant le résultat
-            string res = this->visit(sub->expr()).as<string>();
-            cfg->current_bb->add_IRInstr(IRInstr::copy, t, {varName, res});
+    string varType = ctx->type()->getText();
+    for (auto sdecl : ctx->sub_decl())
+    {
+        visitSub_declWithType(sdecl, varType);
+    }
+
+    return 0;
+}
+
+antlrcpp::Any CodeGenVisitor::visitSub_declWithType(ifccParser::Sub_declContext *ctx, string varType) {
+    string varName = ctx->VAR()->getText();
+
+    if (currentScope->isGlobalScope()) {
+        // TODO:
+    } else {
+        currentScope->addLocalVariable(varName, varType);
+        if (ctx->expr()) {
+            string expr = visit(ctx->expr()).as<string>();
+            cfg->current_bb->add_IRInstr(IRInstr::Operation::copy, VarType::INT, {varName, expr});
         }
     }
+
     return 0;
 }
 
@@ -63,9 +95,15 @@ antlrcpp::Any CodeGenVisitor::visitAssignmentStatement(ifccParser::AssignmentSta
     // Récupération du contexte de la règle assign_stmt
     auto assign = ctx->assign_stmt();
     string varName = assign->VAR()->getText();
+    Symbol *var = currentScope->findVariable(varName);
+    if (var == nullptr) {
+        std::cerr << "error: variable " << varName << " not declared.\n";
+        exit(1);
+    }
+
     // On suppose que la variable a déjà été déclarée
     string exprResult = this->visit(assign->expr()).as<string>();
-    cfg->current_bb->add_IRInstr(IRInstr::copy, Type::INT, {varName, exprResult});
+    cfg->current_bb->add_IRInstr(IRInstr::copy, VarType::INT, {varName, exprResult});
     return 0;
 }
 
@@ -75,60 +113,69 @@ antlrcpp::Any CodeGenVisitor::visitReturn_stmt(ifccParser::Return_stmtContext *c
     // Évalue l'expression de retour
     string exprResult = this->visit(ctx->expr()).as<string>();
     // Pour la gestion du retour, on copie le résultat dans une variable spéciale "ret".
-    cfg->current_bb->add_IRInstr(IRInstr::copy, Type::INT, {"ret", exprResult});
+    cfg->current_bb->add_IRInstr(IRInstr::copy, VarType::INT, {"%eax", exprResult});
     return exprResult;
 }
 
 antlrcpp::Any CodeGenVisitor::visitAddSubExpression(ifccParser::AddSubExpressionContext *ctx)
 {
-    // expr op=('+'|'-') expr
-    string left = this->visit(ctx->expr(0)).as<string>();
-    string right = this->visit(ctx->expr(1)).as<string>();
-    string temp = cfg->create_new_tempvar(Type::INT);
-    string op = ctx->op->getText();
-    if(op == "+") {
-        cfg->current_bb->add_IRInstr(IRInstr::add, Type::INT, {temp, left, right});
-    } else {
-        cfg->current_bb->add_IRInstr(IRInstr::sub, Type::INT, {temp, left, right});
+    string left = visit(ctx->expr(0)).as<string>();
+    string right = visit(ctx->expr(1)).as<string>();
+
+    IRInstr::Operation op;
+    if (ctx->op->getText() == "+")
+    {
+        op = IRInstr::Operation::add;
     }
-    return temp;
+    else if (ctx->op->getText() == "-")
+    {
+        op = IRInstr::Operation::sub;
+    }
+    
+    string tmp = currentScope->addTempVariable("int");
+    cfg->current_bb->add_IRInstr(op, VarType::INT, {tmp, left, right});
+    return tmp;
 }
 
 antlrcpp::Any CodeGenVisitor::visitMulDivExpression(ifccParser::MulDivExpressionContext *ctx)
 {
-    // expr OPM expr – pour l'instant, seule la multiplication est supportée.
-    string left = this->visit(ctx->expr(0)).as<string>();
-    string right = this->visit(ctx->expr(1)).as<string>();
-    string temp = cfg->create_new_tempvar(Type::INT);
-    string op = ctx->OPM()->getText();
-    if(op == "*") {
-        cfg->current_bb->add_IRInstr(IRInstr::mul, Type::INT, {temp, left, right});
+    string left = visit(ctx->expr(0)).as<string>();
+    string right = visit(ctx->expr(1)).as<string>();
+
+    IRInstr::Operation op;
+    if (ctx->OPM()->getText() == "*") {
+        op = IRInstr::Operation::mul;
+    } else if (ctx->OPM()->getText() == "/") {
+        op = IRInstr::Operation::div;
+    } else if (ctx->OPM()->getText() == "%") {
+        op = IRInstr::Operation::rem;
     }
-    else if(op == "/") {
-        // Pour simplifier, on ne gère pas la division ici.
-        cfg->current_bb->add_IRInstr(IRInstr::copy, Type::INT, {temp, left});
-    }
-    else if(op == "%") {
-        // Non implémenté.
-        cfg->current_bb->add_IRInstr(IRInstr::copy, Type::INT, {temp, left});
-    }
-    return temp;
+    
+    string tmp = currentScope->addTempVariable("int");
+    cfg->current_bb->add_IRInstr(op, VarType::INT, {tmp, left, right});
+    return tmp;
 }
 
 antlrcpp::Any CodeGenVisitor::visitConstantExpression(ifccParser::ConstantExpressionContext *ctx)
 {
-    // Traitement des constantes (par exemple, "17")
-    string value = ctx->CONST()->getText();
-    // Crée une variable temporaire et charge la constante dedans.
-    string temp = cfg->create_new_tempvar(Type::INT);
-    cfg->current_bb->add_IRInstr(IRInstr::ldconst, Type::INT, {temp, value});
-    return temp;
+    int value = std::stoi(ctx->CONST()->getText());
+    string var = currentScope->addTempVariable("int");
+    cfg->current_bb->add_IRInstr(IRInstr::Operation::ldconst, VarType::INT, {var, to_string(value)});
+    return var;
 }
 
 antlrcpp::Any CodeGenVisitor::visitVariableExpression(ifccParser::VariableExpressionContext *ctx)
 {
     // On retourne simplement le nom de la variable.
-    return ctx->VAR()->getText();
+    string varName = ctx->VAR()->getText();
+    Symbol *var = currentScope->findVariable(varName);
+    if (var == nullptr)
+    {
+        std::cerr << "error: variable " << varName << " not declared\n";
+        exit(1);
+    }
+
+    return varName;
 }
 
 antlrcpp::Any CodeGenVisitor::visitParenthesisExpression(ifccParser::ParenthesisExpressionContext *ctx)
