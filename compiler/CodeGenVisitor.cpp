@@ -123,6 +123,16 @@ antlrcpp::Any CodeGenVisitor::visitConstantExpression(ifccParser::ConstantExpres
     return temp;
 }
 
+antlrcpp::Any CodeGenVisitor::visitConstantCharExpression(ifccParser::ConstantCharExpressionContext *ctx)
+{
+    // Traitement des constantes de type char (par exemple, 'a')
+    string value = ctx->CONST_CHAR()->getText();
+    // Crée une variable temporaire et charge la constante dedans.
+    string temp = cfg->create_new_tempvar(Type::CHAR);
+    cfg->current_bb->add_IRInstr(IRInstr::ldconst, Type::CHAR, {temp, value});
+    return temp;
+}
+
 antlrcpp::Any CodeGenVisitor::visitVariableExpression(ifccParser::VariableExpressionContext *ctx)
 {
     // On retourne simplement le nom de la variable.

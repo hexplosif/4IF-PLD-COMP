@@ -144,9 +144,11 @@ void IRInstr::gen_asm(std::ostream &o)
 
     case not_op:
         // not_op: params[0] = dest, params[1] = source
-        o << "    cmpl $0, " << bb->cfg->IR_reg_to_asm(params[1]) << "\n";
+        o << "    movl " << bb->cfg->IR_reg_to_asm(params[1]) << ", %eax\n";
+        o << "    cmpl $0, %eax\n";
         o << "    sete %al\n";
         o << "    movzbl %al, %eax\n";
+        o << "    movl %eax, " << bb->cfg->IR_reg_to_asm(params[0]) << "\n";
         break;
 
     case rmem:
