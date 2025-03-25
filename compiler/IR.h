@@ -25,14 +25,22 @@ public:
         add,
         sub,
         mul,
-		div,
-		rem,
+        div,
+        mod,
         rmem,
         wmem,
         call, 
         cmp_eq,
+        cmp_ne,
         cmp_lt,
-        cmp_le
+        cmp_le,
+        cmp_gt,
+        cmp_ge,
+        bit_and,
+        bit_or,
+        bit_xor,
+        unary_minus,
+        not_op
     } Operation;
 
     /**  constructor */
@@ -91,11 +99,10 @@ public:
     std::string new_BB_name();
     BasicBlock* current_bb;
 
-protected:
     // On remplace ces membres par notre instance de SymbolTable
-    // std::map<std::string, Type> SymbolType;
-    // std::map<std::string, int> SymbolIndex;
     SymbolTable* currentScope; /**< the symbol table of the current scope */
+
+protected:
 
     int nextFreeSymbolIndex; /**< to allocate new symbols in the symbol table */
     int nextBBnumber; /**< just for naming */

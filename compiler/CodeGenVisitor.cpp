@@ -82,7 +82,7 @@ antlrcpp::Any CodeGenVisitor::visitSub_declWithType(ifccParser::Sub_declContext 
     } else {
         currentScope->addLocalVariable(varName, varType);
         if (ctx->expr()) {
-            string expr = visit(ctx->expr()).as<string>();
+            string expr = any_cast<string>(visit(ctx->expr()));
             cfg->current_bb->add_IRInstr(IRInstr::Operation::copy, VarType::INT, {varName, expr});
         }
     }
@@ -102,7 +102,7 @@ antlrcpp::Any CodeGenVisitor::visitAssignmentStatement(ifccParser::AssignmentSta
     }
 
     // On suppose que la variable a déjà été déclarée
-    string exprResult = this->visit(assign->expr()).as<string>();
+    string exprResult = any_cast<string>(this->visit(assign->expr()));
     cfg->current_bb->add_IRInstr(IRInstr::copy, VarType::INT, {varName, exprResult});
     return 0;
 }
@@ -111,7 +111,7 @@ antlrcpp::Any CodeGenVisitor::visitReturn_stmt(ifccParser::Return_stmtContext *c
 {
     // return_stmt : 'return' expr ';'
     // Évalue l'expression de retour
-    string exprResult = this->visit(ctx->expr()).as<string>();
+    string exprResult = any_cast<string>(this->visit(ctx->expr()));
     // Pour la gestion du retour, on copie le résultat dans une variable spéciale "ret".
     cfg->current_bb->add_IRInstr(IRInstr::copy, VarType::INT, {"%eax", exprResult});
     return exprResult;
@@ -119,8 +119,8 @@ antlrcpp::Any CodeGenVisitor::visitReturn_stmt(ifccParser::Return_stmtContext *c
 
 antlrcpp::Any CodeGenVisitor::visitAddSubExpression(ifccParser::AddSubExpressionContext *ctx)
 {
-    string left = visit(ctx->expr(0)).as<string>();
-    string right = visit(ctx->expr(1)).as<string>();
+    string left = any_cast<string>(visit(ctx->expr(0)));
+    string right = any_cast<string>(visit(ctx->expr(1)));
 
     IRInstr::Operation op;
     if (ctx->op->getText() == "+")
@@ -132,15 +132,15 @@ antlrcpp::Any CodeGenVisitor::visitAddSubExpression(ifccParser::AddSubExpression
         op = IRInstr::Operation::sub;
     }
     
-    string tmp = currentScope->addTempVariable("int");
+    string tmp = cfg->currentScope->addTempVariable("int");
     cfg->current_bb->add_IRInstr(op, VarType::INT, {tmp, left, right});
     return tmp;
 }
 
 antlrcpp::Any CodeGenVisitor::visitMulDivExpression(ifccParser::MulDivExpressionContext *ctx)
 {
-    string left = visit(ctx->expr(0)).as<string>();
-    string right = visit(ctx->expr(1)).as<string>();
+    string left = any_cast<string>(visit(ctx->expr(0)));
+    string right = any_cast<string>(visit(ctx->expr(1)));
 
     IRInstr::Operation op;
     if (ctx->OPM()->getText() == "*") {
@@ -148,10 +148,10 @@ antlrcpp::Any CodeGenVisitor::visitMulDivExpression(ifccParser::MulDivExpression
     } else if (ctx->OPM()->getText() == "/") {
         op = IRInstr::Operation::div;
     } else if (ctx->OPM()->getText() == "%") {
-        op = IRInstr::Operation::rem;
+        op = IRInstr::Operation::mod;
     }
     
-    string tmp = currentScope->addTempVariable("int");
+    string tmp = cfg->currentScope->addTempVariable("int");
     cfg->current_bb->add_IRInstr(op, VarType::INT, {tmp, left, right});
     return tmp;
 }
@@ -159,9 +159,9 @@ antlrcpp::Any CodeGenVisitor::visitMulDivExpression(ifccParser::MulDivExpression
 antlrcpp::Any CodeGenVisitor::visitConstantExpression(ifccParser::ConstantExpressionContext *ctx)
 {
     int value = std::stoi(ctx->CONST()->getText());
-    string var = currentScope->addTempVariable("int");
-    cfg->current_bb->add_IRInstr(IRInstr::Operation::ldconst, VarType::INT, {var, to_string(value)});
-    return var;
+    string temp = cfg->currentScope->addTempVariable("int");
+    cfg->current_bb->add_IRInstr(IRInstr::Operation::ldconst, VarType::INT, {temp, to_string(value)});
+    return temp;
 }
 
 antlrcpp::Any CodeGenVisitor::visitVariableExpression(ifccParser::VariableExpressionContext *ctx)
@@ -181,4 +181,58 @@ antlrcpp::Any CodeGenVisitor::visitVariableExpression(ifccParser::VariableExpres
 antlrcpp::Any CodeGenVisitor::visitParenthesisExpression(ifccParser::ParenthesisExpressionContext *ctx)
 {
     return this->visit(ctx->expr());
+}
+
+antlrcpp::Any CodeGenVisitor::visitComparisonExpression(ifccParser::ComparisonExpressionContext *ctx)
+{
+    // expr op=('=='|'<'|'<='|'>'|'>=') expr
+    string left = any_cast<string>(this->visit(ctx->expr(0)));
+    string right = any_cast<string>(this->visit(ctx->expr(1)));
+    string temp = cfg->currentScope->addTempVariable("int");
+    string op = ctx->op->getText();
+    if(op == "==") {
+        cfg->current_bb->add_IRInstr(IRInstr::cmp_eq, VarType::INT, {temp, left, right});
+    } else if (op == "!=") {
+        cfg->current_bb->add_IRInstr(IRInstr::cmp_ne, VarType::INT, {temp, left, right});
+    } else if(op == "<") {
+        cfg->current_bb->add_IRInstr(IRInstr::cmp_lt, VarType::INT, {temp, left, right});
+    } else if(op == "<=") {
+        cfg->current_bb->add_IRInstr(IRInstr::cmp_le, VarType::INT, {temp, left, right});
+    } else if(op == ">") {
+        cfg->current_bb->add_IRInstr(IRInstr::cmp_gt, VarType::INT, {temp, left, right});
+    } else if(op == ">=") {
+        cfg->current_bb->add_IRInstr(IRInstr::cmp_ge, VarType::INT, {temp, left, right});
+    }
+    return temp;
+}
+
+antlrcpp::Any CodeGenVisitor::visitBitwiseExpression(ifccParser::BitwiseExpressionContext *ctx)
+{
+    // expr op=('&'|'|'|'^') expr
+    string left = any_cast<string>(this->visit(ctx->expr(0)));
+    string right = any_cast<string>(this->visit(ctx->expr(1)));
+    string temp = cfg->currentScope->addTempVariable("int");
+    string op = ctx->op->getText();
+    if(op == "&") {
+        cfg->current_bb->add_IRInstr(IRInstr::bit_and, VarType::INT, {temp, left, right});
+    } else if(op == "|") {
+        cfg->current_bb->add_IRInstr(IRInstr::bit_or, VarType::INT, {temp, left, right});
+    } else if(op == "^") {
+        cfg->current_bb->add_IRInstr(IRInstr::bit_xor, VarType::INT, {temp, left, right});
+    }
+    return temp;
+}
+
+antlrcpp::Any CodeGenVisitor::visitUnaryExpression(ifccParser::UnaryExpressionContext *ctx)
+{
+    // op=('-'|'!') expr
+    string expr = any_cast<string>(this->visit(ctx->expr()));
+    string temp = cfg->currentScope->addTempVariable("int");
+    string op = ctx->op->getText();
+    if(op == "-") {
+        cfg->current_bb->add_IRInstr(IRInstr::unary_minus, VarType::INT, {temp, expr});
+    } else if(op == "!") {
+        cfg->current_bb->add_IRInstr(IRInstr::not_op, VarType::INT, {temp, expr});
+    }
+    return temp;
 }
