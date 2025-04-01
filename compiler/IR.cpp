@@ -1,6 +1,5 @@
 #include "IR.h"
 #include "SymbolTable.h"
-#include "type.h"
 #include <cstdlib>
 #include <iostream>
 #include <sstream>
@@ -8,7 +7,7 @@ using namespace std;
 
 /* ---------------------- IRInstr ---------------------- */
 
-IRInstr::IRInstr(BasicBlock *bb_, Operation op, Type t, std::vector<std::string> params)
+IRInstr::IRInstr(BasicBlock *bb_, Operation op, VarType t, std::vector<std::string> params)
     : bb(bb_), op(op), t(t), params(params)
 {
 }
@@ -16,158 +15,203 @@ IRInstr::IRInstr(BasicBlock *bb_, Operation op, Type t, std::vector<std::string>
 void IRInstr::gen_asm(std::ostream &o)
 {
     // Pour simplifier, on gère ici ldconst, copy, add, sub et mul.
+
+    static int labelCounter = 0;
     switch (op)
     {
     case ldconst:
         // ldconst: params[0] = destination, params[1] = constante
-        o << "    movl $" << params[1] << ", " << bb->cfg->IR_reg_to_asm(params[0]) << "\n";
+        o << "    movl $" << params[1] << ", " << params[0] << "\n";
         break;
     case copy:
         // copy: params[0] = destination, params[1] = source
-        o << "    movl " << bb->cfg->IR_reg_to_asm(params[1]) << ", %eax\n";
-        o << "    movl %eax, " << bb->cfg->IR_reg_to_asm(params[0]) << "\n"; // Stocke le résultat
+        o << "    movl " << params[1] << ", %eax\n";
+        o << "    movl %eax, " << params[0] << "\n"; // Stocke le résultat
         break;
     case add:
         // add: params[0] = dest, params[1] = gauche, params[2] = droite
-        o << "    movl " << bb->cfg->IR_reg_to_asm(params[1]) << ", %eax\n";
-        o << "    addl " << bb->cfg->IR_reg_to_asm(params[2]) << ", %eax\n";
-        o << "    movl %eax, " << bb->cfg->IR_reg_to_asm(params[0]) << "\n";
+        o << "    movl " << params[1] << ", %eax\n";
+        o << "    addl " << params[2] << ", %eax\n";
+        o << "    movl %eax, " << params[0] << "\n";
         break;
     case sub:
-        // sub: params[0] = dest, params[1] = gauche, params[2] = droite
-        o << "    movl " << bb->cfg->IR_reg_to_asm(params[1]) << ", %eax\n";
-        o << "    subl " << bb->cfg->IR_reg_to_asm(params[2]) << ", %eax\n";
-        o << "    movl %eax, " << bb->cfg->IR_reg_to_asm(params[0]) << "\n";
+        o << "    movl " << params[1] << ", %eax\n";
+        o << "    subl " << params[2] << ", %eax\n";
+        o << "    movl %eax, " << params[0] << "\n";
         break;
     case mul:
-        // mul: params[0] = dest, params[1] = gauche, params[2] = droite
-        o << "    movl " << bb->cfg->IR_reg_to_asm(params[1]) << ", %eax\n";
-        o << "    imull " << bb->cfg->IR_reg_to_asm(params[2]) << ", %eax\n";
-        o << "    movl %eax, " << bb->cfg->IR_reg_to_asm(params[0]) << "\n";
+        o << "    movl " << params[1] << ", %eax\n";
+        o << "    imull " << params[2] << ", %eax\n";
+        o << "    movl %eax, " << params[0] << "\n";
         break;
-
-    case div:
-        // div: params[0] = dest, params[1] = gauche, params[2] = droite
-        o << "    movl " << bb->cfg->IR_reg_to_asm(params[1]) << ", %eax\n";
+    case div:    // params : dest, source1, source2
+        o << "    movl " << params[1] << ", %eax\n";
         o << "    cltd\n";
-        o << "    idivl " << bb->cfg->IR_reg_to_asm(params[2]) << "\n";
-        o << "    movl %eax, " << bb->cfg->IR_reg_to_asm(params[0]) << "\n";
+        o << "    idivl " << params[2] << "\n";
+        o << "    movl %eax, " << params[0] << "\n";
         break;
-
-    case mod:
-        // mod: params[0] = dest, params[1] = gauche, params[2] = droite
-        o << "    movl " << bb->cfg->IR_reg_to_asm(params[1]) << ", %eax\n";
+    case mod:    // params : dest, source1, source2
+        o << "    movl " << params[1] << ", %eax\n";
         o << "    cltd\n";
-        o << "    idivl " << bb->cfg->IR_reg_to_asm(params[2]) << "\n";
-        o << "    movl %edx, " << bb->cfg->IR_reg_to_asm(params[0]) << "\n";
-        break;
+        o << "    idivl " << params[2] << "\n";
+        o << "    movl %edx, " << params[0] << "\n";
+        break;  
 
     case cmp_eq:
         // cmp_eq: params[0] = dest, params[1] = gauche, params[2] = droite
-        o << "    movl " << bb->cfg->IR_reg_to_asm(params[1]) << ", %eax\n";
-        o << "    cmpl " << bb->cfg->IR_reg_to_asm(params[2]) << ", %eax\n";
+        o << "    movl " << params[1] << ", %eax\n";
+        o << "    cmpl " << params[2] << ", %eax\n";
         o << "    sete %al\n";
         o << "    movzbl %al, %eax\n";
-        o << "    movl %eax, " << bb->cfg->IR_reg_to_asm(params[0]) << "\n";
+        o << "    movl %eax, " << params[0] << "\n";
         break;
     case cmp_lt:
         // cmp_lt: params[0] = dest, params[1] = gauche, params[2] = droite
-        o << "    movl " << bb->cfg->IR_reg_to_asm(params[1]) << ", %eax\n";
-        o << "    cmpl " << bb->cfg->IR_reg_to_asm(params[2]) << ", %eax\n";
+        o << "    movl " << params[1] << ", %eax\n";
+        o << "    cmpl " << params[2] << ", %eax\n";
         o << "    setl %al\n";
         o << "    movzbl %al, %eax\n";
-        o << "    movl %eax, " << bb->cfg->IR_reg_to_asm(params[0]) << "\n";
+        o << "    movl %eax, " << params[0] << "\n";
         break;
     case cmp_le:
         // cmp_le: params[0] = dest, params[1] = gauche, params[2] = droite
-        o << "    movl " << bb->cfg->IR_reg_to_asm(params[1]) << ", %eax\n";
-        o << "    cmpl " << bb->cfg->IR_reg_to_asm(params[2]) << ", %eax\n";
+        o << "    movl " << params[1] << ", %eax\n";
+        o << "    cmpl " << params[2] << ", %eax\n";
         o << "    setle %al\n";
         o << "    movzbl %al, %eax\n";
-        o << "    movl %eax, " << bb->cfg->IR_reg_to_asm(params[0]) << "\n";
+        o << "    movl %eax, " << params[0] << "\n";
         break;
 
     case cmp_ne:
         // cmp_ne: params[0] = dest, params[1] = gauche, params[2] = droite
-        o << "    movl " << bb->cfg->IR_reg_to_asm(params[1]) << ", %eax\n";
-        o << "    cmpl " << bb->cfg->IR_reg_to_asm(params[2]) << ", %eax\n";
+        o << "    movl " << params[1] << ", %eax\n";
+        o << "    cmpl " << params[2] << ", %eax\n";
         o << "    setne %al\n";
         o << "    movzbl %al, %eax\n";
-        o << "    movl %eax, " << bb->cfg->IR_reg_to_asm(params[0]) << "\n";
+        o << "    movl %eax, " << params[0] << "\n";
         break;
 
     case cmp_gt:
         // cmp_gt: params[0] = dest, params[1] = gauche, params[2] = droite
-        o << "    movl " << bb->cfg->IR_reg_to_asm(params[1]) << ", %eax\n";
-        o << "    cmpl " << bb->cfg->IR_reg_to_asm(params[2]) << ", %eax\n";
+        o << "    movl " << params[1] << ", %eax\n";
+        o << "    cmpl " << params[2] << ", %eax\n";
         o << "    setg %al\n";
         o << "    movzbl %al, %eax\n";
-        o << "    movl %eax, " << bb->cfg->IR_reg_to_asm(params[0]) << "\n";
+        o << "    movl %eax, " << params[0] << "\n";
         break;
 
     case cmp_ge:
         // cmp_ge: params[0] = dest, params[1] = gauche, params[2] = droite
-        o << "    movl " << bb->cfg->IR_reg_to_asm(params[1]) << ", %eax\n";
-        o << "    cmpl " << bb->cfg->IR_reg_to_asm(params[2]) << ", %eax\n";
+        o << "    movl " << params[1] << ", %eax\n";
+        o << "    cmpl " << params[2] << ", %eax\n";
         o << "    setge %al\n";
         o << "    movzbl %al, %eax\n";
-        o << "    movl %eax, " << bb->cfg->IR_reg_to_asm(params[0]) << "\n";
+        o << "    movl %eax, " << params[0] << "\n";
         break;
 
     case bit_and:
         // bit_and: params[0] = dest, params[1] = gauche, params[2] = droite
-        o << "    movl " << bb->cfg->IR_reg_to_asm(params[1]) << ", %eax\n";
-        o << "    andl " << bb->cfg->IR_reg_to_asm(params[2]) << ", %eax\n";
-        o << "    movl %eax, " << bb->cfg->IR_reg_to_asm(params[0]) << "\n";
+        o << "    movl " << params[1] << ", %eax\n";
+        o << "    andl " << params[2] << ", %eax\n";
+        o << "    movl %eax, " << params[0] << "\n";
         break;
 
     case bit_or:
         // bit_or: params[0] = dest, params[1] = gauche, params[2] = droite
-        o << "    movl " << bb->cfg->IR_reg_to_asm(params[1]) << ", %eax\n";
-        o << "    orl " << bb->cfg->IR_reg_to_asm(params[2]) << ", %eax\n";
-        o << "    movl %eax, " << bb->cfg->IR_reg_to_asm(params[0]) << "\n";
+        o << "    movl " << params[1] << ", %eax\n";
+        o << "    orl " << params[2] << ", %eax\n";
+        o << "    movl %eax, " << params[0] << "\n";
         break;
 
     case bit_xor:
         // bit_xor: params[0] = dest, params[1] = gauche, params[2] = droite
-        o << "    movl " << bb->cfg->IR_reg_to_asm(params[1]) << ", %eax\n";
-        o << "    xorl " << bb->cfg->IR_reg_to_asm(params[2]) << ", %eax\n";
-        o << "    movl %eax, " << bb->cfg->IR_reg_to_asm(params[0]) << "\n";
+        o << "    movl " << params[1] << ", %eax\n";
+        o << "    xorl " << params[2] << ", %eax\n";
+        o << "    movl %eax, " << params[0] << "\n";
         break;
 
     case unary_minus:
         // unary_minus: params[0] = dest, params[1] = source
-        o << "    movl " << bb->cfg->IR_reg_to_asm(params[1]) << ", %eax\n";
+        o << "    movl " << params[1] << ", %eax\n";
         o << "    negl %eax\n";
-        o << "    movl %eax, " << bb->cfg->IR_reg_to_asm(params[0]) << "\n";
+        o << "    movl %eax, " << params[0] << "\n";
         break;
 
     case not_op:
         // not_op: params[0] = dest, params[1] = source
-        o << "    movl " << bb->cfg->IR_reg_to_asm(params[1]) << ", %eax\n";
+        o << "    movl " << params[1] << ", %eax\n";
         o << "    cmpl $0, %eax\n";
         o << "    sete %al\n";
         o << "    movzbl %al, %eax\n";
-        o << "    movl %eax, " << bb->cfg->IR_reg_to_asm(params[0]) << "\n";
+        o << "    movl %eax, " << params[0] << "\n";
         break;
 
+    case log_and:
+    {
+        int currentLabel = labelCounter++;
+        std::string labelFalse = ".Lfalse" + std::to_string(currentLabel);
+        std::string labelEnd = ".Lend" + std::to_string(currentLabel);
+
+        o << "    movl " << params[1] << ", %eax\n";
+        o << "    testl %eax, %eax\n";
+        o << "    jz " << labelFalse << "\n";
+
+        o << "    movl " << params[2] << ", %eax\n";
+        o << "    testl %eax, %eax\n";
+        o << "    jz " << labelFalse << "\n";
+
+        o << "    movl $1, %eax\n";
+        o << "    jmp " << labelEnd << "\n";
+
+        o << labelFalse << ":\n";
+        o << "    movl $0, %eax\n";
+
+        o << labelEnd << ":\n";
+        o << "    movl %eax, " << params[0] << "\n";
+        break;
+    }
+    case log_or:
+    {
+        int currentLabel = labelCounter++;
+        std::string labelTrue = ".Ltrue" + std::to_string(currentLabel);
+        std::string labelEnd = ".Lend" + std::to_string(currentLabel);
+    
+        o << "    movl " << params[1] << ", %eax\n";
+        o << "    testl %eax, %eax\n";
+        o << "    jnz " << labelTrue << "\n";
+    
+        o << "    movl " << params[2] << ", %eax\n";
+        o << "    testl %eax, %eax\n";
+        o << "    jnz " << labelTrue << "\n";
+    
+        o << "    movl $0, %eax\n";
+        o << "    jmp " << labelEnd << "\n";
+    
+        o << labelTrue << ":\n";
+        o << "    movl $1, %eax\n";
+    
+        o << labelEnd << ":\n";
+        o << "    movl %eax, " << params[0] << "\n";
+        break;
+    }
     case rmem:
         // rmem: params[0] = destination, params[1] = adresse
-        o << "    movl " << bb->cfg->IR_reg_to_asm(params[1]) << ", %eax\n";
+        o << "    movl " << params[1] << ", %eax\n";
         o << "    movl (%eax), %eax\n";
-        o << "    movl %eax, " << bb->cfg->IR_reg_to_asm(params[0]) << "\n";
+        o << "    movl %eax, " << params[0] << "\n";
         break;
 
     case wmem:
         // wmem: params[0] = adresse, params[1] = valeur
-        o << "    movl " << bb->cfg->IR_reg_to_asm(params[1]) << ", %eax\n";
-        o << "    movl " << bb->cfg->IR_reg_to_asm(params[0]) << ", %edx\n";
+        o << "    movl " << params[1] << ", %eax\n";
+        o << "    movl " << params[0] << ", %edx\n";
         o << "    movl %eax, (%edx)\n";
         break;
 
     case call:
         // call: params[0] = label, params[1] = destination, params[2]... = paramètres
         o << "    call " << params[0] << "\n";
+        o << "    movl %eax, " << params[1] << "\n";
         break;
 
     case jmp:
@@ -188,9 +232,16 @@ BasicBlock::BasicBlock(CFG *cfg, std::string entry_label)
 {
 }
 
-void BasicBlock::add_IRInstr(IRInstr::Operation op, Type t, std::vector<std::string> params)
+void BasicBlock::add_IRInstr(IRInstr::Operation op, VarType t, std::vector<std::string> params)
 {
-    IRInstr *instr = new IRInstr(this, op, t, params);
+    bool needFindAdd = (op == IRInstr::Operation::call || op == IRInstr::Operation::jmp);
+    std::string p0 = needFindAdd ? params[0] : cfg->IR_reg_to_asm(params[0]);
+    std::string p1 = params.size() >= 2 ? cfg->IR_reg_to_asm(params[1]) : "";
+    std::string p2 = params.size() >= 3 ? cfg->IR_reg_to_asm(params[2]) : "";
+
+    std::vector<std::string> paramsRealAddr = {p0, p1, p2};
+
+    IRInstr *instr = new IRInstr(this, op, t, paramsRealAddr);
     instrs.push_back(instr);
 }
 
@@ -200,10 +251,26 @@ void BasicBlock::gen_asm(std::ostream &o)
     {
         instr->gen_asm(o);
     }
-    // Ici, nous générons un saut inconditionnel vers le bloc suivant s'il existe.
-    if (exit_true != nullptr)
+
+    if (!test_var_name.empty() && exit_true != nullptr && exit_false != nullptr)
     {
+        // Conditional jump based on test_var_name
+        o << "    movl " << cfg->IR_reg_to_asm(test_var_name) << ", %eax\n";
+        o << "    cmpl $0, %eax\n";
+        o << "    je " << exit_false->label << "\n";
         o << "    jmp " << exit_true->label << "\n";
+    }
+    else if (exit_true != nullptr)
+    {
+        // Unconditional jump to exit_true
+        o << "    jmp " << exit_true->label << "\n";
+    }
+    else if (exit_true != nullptr)
+    {
+        // Unconditional jump to exit_true
+        o << "    jmp " << exit_true->label << "\n";
+    } else { // si on est à la fin de cfg (fin de function)
+        cfg->gen_asm_epilogue(o);
     }
 }
 
@@ -211,6 +278,7 @@ void BasicBlock::gen_asm(std::ostream &o)
 
 CFG::CFG(DefFonction *ast) : ast(ast), nextFreeSymbolIndex(0), nextBBnumber(0), current_bb(nullptr)
 {
+    this->ast = ast;
     // Création du bloc d'entrée ("main")
     current_bb = new BasicBlock(this, "main");
     bbs.push_back(current_bb);
@@ -219,40 +287,45 @@ CFG::CFG(DefFonction *ast) : ast(ast), nextFreeSymbolIndex(0), nextBBnumber(0), 
 void CFG::add_bb(BasicBlock *bb)
 {
     bbs.push_back(bb);
+    if (current_bb != nullptr)
+    {
+        current_bb->exit_true = bb;
+    }
+    current_bb = bb;
 }
 
 void CFG::gen_asm(std::ostream &o)
 {
-    o << ".global main\n";  // Rendre main visible
+    o << ".global main\n";
     for (size_t i = 0; i < bbs.size(); i++)
     {
+        o << bbs[i]->label << ":\n"; // Emit label for every block
         if (i == 0)
         {
-            o << bbs[i]->label << ":\n"; // S'assure que main est bien affiché
             gen_asm_prologue(o);
+        } else {
+            o << bbs[i]->label << ":\n";
         }
         bbs[i]->gen_asm(o);
     }
-    // Ajoute la définition du label de l'épilogue
     o << ".Lepilogue:\n";
     gen_asm_epilogue(o);
 }
 
 
-std::string CFG::IR_reg_to_asm(std::string reg)
+std::string CFG::IR_reg_to_asm(std::string& reg)
 {
-    // Si le nom commence par '%' on considère que c'est un registre explicite et on le renvoie tel quel.
-    if (!reg.empty() && reg[0] == '%')
-        return reg;
-        
-    // Sinon, utilise la table des symboles pour obtenir l'index et calcule l'offset mémoire.
-    int idx = symbolTable.getSymbolIndex(reg);
-    if (idx < 0)
+    // Utilise la table des symboles pour obtenir l'index et calcule l'offset mémoire.
+    Symbol* p = currentScope->findVariable(reg);
+    if (p != nullptr)
     {
-        // En cas d'erreur, on renvoie une adresse factice.
-        return "0(%rbp)";
+        if (p->scopeType == GLOBAL)
+        {
+            return reg + "(%rip)";
+        }
+        return "-" + to_string(p->offset) + "(%rbp)";
     }
-    return "-" + std::to_string(idx + 4) + "(%rbp)";
+    return reg;
 }
 
 
@@ -268,26 +341,60 @@ void CFG::gen_asm_epilogue(std::ostream &o)
     o << "    ret\n";
 }
 
-void CFG::add_to_symbol_table(std::string name, Type t)
-{
-    symbolTable.addSymbol(name);
-}
-
-std::string CFG::create_new_tempvar(Type t)
-{
-    // Génère un nom unique pour une variable temporaire.
-    std::string temp = "t" + std::to_string(nextFreeSymbolIndex);
-    nextFreeSymbolIndex++;
-    symbolTable.addSymbol(temp);
-    return temp;
-}
-
-int CFG::get_var_index(std::string name)
-{
-    return symbolTable.getSymbolIndex(name);
-}
-
 std::string CFG::new_BB_name()
 {
     return "BB" + std::to_string(nextBBnumber++);
+}
+
+/* ---------------------- GVM ---------------------- */
+GVM::GVM()
+{
+    globalScope = new SymbolTable(0);
+}
+
+void GVM::addGlobalVariable(std::string name, std::string type)
+{
+    globalScope->addGlobalVariable(name, type);
+}
+
+void GVM::setGlobalVariableValue(std::string name, int value)
+{
+    if (globalScope->findVariableThisScope(name) != nullptr)
+    {
+        globalVariableValues[name] = value;
+    }
+    else
+    {
+        std::cerr << "error: variable '" << name << "' not declared\n";
+        exit(1);
+    }
+}
+
+std::string GVM::addTempConstVariable(std::string type, int value)
+{
+    return globalScope->addTempConstVariable(type, value);
+}
+
+void GVM::gen_asm(std::ostream &o)
+{
+    // Verifier si on a des variables globales
+    if (globalScope->getNumberVariable() == 0) return;
+
+    o << "    .data\n";
+
+    // On génère le code assembleur pour les variables globales
+    for (auto var : globalScope->getTable())
+    {
+        // check if var is temp variable
+        if (SymbolTable::isTempVariable(var.first)) continue;
+        o << "    .globl " << var.first << "\n";
+        o << var.first << ":\n";
+        if (globalVariableValues.count(var.first) == 0) {
+            o << "    .zero 4\n";
+        } else {
+            o << "    .long " << globalVariableValues[var.first] << "\n";
+        }
+    }
+
+    o << "    .text\n";
 }
