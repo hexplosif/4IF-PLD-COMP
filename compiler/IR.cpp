@@ -200,9 +200,18 @@ void BasicBlock::gen_asm(std::ostream &o)
     {
         instr->gen_asm(o);
     }
-    // Ici, nous générons un saut inconditionnel vers le bloc suivant s'il existe.
-    if (exit_true != nullptr)
+
+    if (!test_var_name.empty() && exit_true != nullptr && exit_false != nullptr)
     {
+        // Conditional jump based on test_var_name
+        o << "    movl " << cfg->IR_reg_to_asm(test_var_name) << ", %eax\n";
+        o << "    cmpl $0, %eax\n";
+        o << "    je " << exit_false->label << "\n";
+        o << "    jmp " << exit_true->label << "\n";
+    }
+    else if (exit_true != nullptr)
+    {
+        // Unconditional jump to exit_true
         o << "    jmp " << exit_true->label << "\n";
     }
 }
@@ -223,17 +232,16 @@ void CFG::add_bb(BasicBlock *bb)
 
 void CFG::gen_asm(std::ostream &o)
 {
-    o << ".global main\n";  // Rendre main visible
+    o << ".global main\n";
     for (size_t i = 0; i < bbs.size(); i++)
     {
+        o << bbs[i]->label << ":\n"; // Emit label for every block
         if (i == 0)
         {
-            o << bbs[i]->label << ":\n"; // S'assure que main est bien affiché
             gen_asm_prologue(o);
         }
         bbs[i]->gen_asm(o);
     }
-    // Ajoute la définition du label de l'épilogue
     o << ".Lepilogue:\n";
     gen_asm_epilogue(o);
 }
