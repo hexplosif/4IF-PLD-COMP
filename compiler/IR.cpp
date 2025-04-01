@@ -15,6 +15,7 @@ IRInstr::IRInstr(BasicBlock *bb_, Operation op, Type t, std::vector<std::string>
 
 void IRInstr::gen_asm(std::ostream &o)
 {
+    static int labelCounter = 0;
     // Pour simplifier, on gère ici ldconst, copy, add, sub et mul.
     switch (op)
     {
@@ -151,6 +152,55 @@ void IRInstr::gen_asm(std::ostream &o)
         o << "    movl %eax, " << bb->cfg->IR_reg_to_asm(params[0]) << "\n";
         break;
 
+    case log_and:
+    {
+        int currentLabel = labelCounter++;
+        std::string labelFalse = ".Lfalse" + std::to_string(currentLabel);
+        std::string labelEnd = ".Lend" + std::to_string(currentLabel);
+
+        o << "    movl " << bb->cfg->IR_reg_to_asm(params[1]) << ", %eax\n";
+        o << "    testl %eax, %eax\n";
+        o << "    jz " << labelFalse << "\n";
+
+        o << "    movl " << bb->cfg->IR_reg_to_asm(params[2]) << ", %eax\n";
+        o << "    testl %eax, %eax\n";
+        o << "    jz " << labelFalse << "\n";
+
+        o << "    movl $1, %eax\n";
+        o << "    jmp " << labelEnd << "\n";
+
+        o << labelFalse << ":\n";
+        o << "    movl $0, %eax\n";
+
+        o << labelEnd << ":\n";
+        o << "    movl %eax, " << bb->cfg->IR_reg_to_asm(params[0]) << "\n";
+        break;
+    }
+    case log_or:
+    {
+        int currentLabel = labelCounter++;
+        std::string labelTrue = ".Ltrue" + std::to_string(currentLabel);
+        std::string labelEnd = ".Lend" + std::to_string(currentLabel);
+    
+        o << "    movl " << bb->cfg->IR_reg_to_asm(params[1]) << ", %eax\n";
+        o << "    testl %eax, %eax\n";
+        o << "    jnz " << labelTrue << "\n";
+    
+        o << "    movl " << bb->cfg->IR_reg_to_asm(params[2]) << ", %eax\n";
+        o << "    testl %eax, %eax\n";
+        o << "    jnz " << labelTrue << "\n";
+    
+        o << "    movl $0, %eax\n";
+        o << "    jmp " << labelEnd << "\n";
+    
+        o << labelTrue << ":\n";
+        o << "    movl $1, %eax\n";
+    
+        o << labelEnd << ":\n";
+        o << "    movl %eax, " << bb->cfg->IR_reg_to_asm(params[0]) << "\n";
+        break;
+    }
+     
     case rmem:
         // rmem: params[0] = destination, params[1] = adresse
         o << "    movl " << bb->cfg->IR_reg_to_asm(params[1]) << ", %eax\n";
