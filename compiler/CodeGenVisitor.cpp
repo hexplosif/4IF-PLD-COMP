@@ -14,31 +14,40 @@ CFG* cfg = nullptr;
 
 antlrcpp::Any CodeGenVisitor::visitProg(ifccParser::ProgContext *ctx) 
 {
-    // Création du CFG pour main (l'AST de la fonction est ici nullptr pour simplifier)
-    cfg = new CFG(nullptr);
+    // Création du GVM (Global Variable Manager)
+    gvm = new GVM();
     
     // Le programme est : (decl_stmt)* 'int' 'main' '(' ')' block
+    // On traite ici les déclarations globales
+    for (auto decl : ctx->decl_stmt())
+    {
+        this->visit(decl);
+    }
+
+    // Création du CFG pour main (l'AST de la fonction est ici nullptr pour simplifier)
+    cfg = new CFG(nullptr);
+
     // On traite ici le bloc principal
     this->visit(ctx->block());
     
     // Pour le return, la génération IR a lieu dans visitReturn_stmt.
     
     // Une fois le CFG construit, on génère le code assembleur.
+    gvm->gen_asm(std::cout);
     cfg->gen_asm(std::cout);
     return 0;
 }
 
 antlrcpp::Any CodeGenVisitor::visitBlock(ifccParser::BlockContext *ctx)
 {
-    bool isThisFunctionBlock = currentScope->isGlobalScope();
+    bool isThisFunctionBlock = (cfg->currentScope == nullptr);
 
     // TODO: if this block is a function block, we need to create a new cfg for the function
 
     // Creer un nouveau scope quand on entre un nouveau block
-    SymbolTable *parentScope = currentScope;
-    currentScope = new SymbolTable(parentScope->getCurrentDeclOffset());
-    currentScope->setParent(parentScope);
-    cfg->set_current_scope(currentScope);
+    SymbolTable *parentScope = isThisFunctionBlock ? gvm->getGlobalScope() : cfg->currentScope;
+    cfg->currentScope = new SymbolTable(parentScope->getCurrentDeclOffset());
+    cfg->currentScope->setParent(parentScope);
 
     // Créer un nouveau basic block
     string blockName = cfg->new_BB_name();
@@ -53,8 +62,8 @@ antlrcpp::Any CodeGenVisitor::visitBlock(ifccParser::BlockContext *ctx)
     }
 
     // le block est finis, on synchronize le parent et ce scope; on revient vers scope de parent
-    currentScope->getParent()->synchronize(currentScope);
-    currentScope = currentScope->getParent();
+    cfg->currentScope->getParent()->synchronize(cfg->currentScope);
+    cfg->currentScope = cfg->currentScope->getParent();
 
     if (isThisFunctionBlock) { // si ce bloc est une fonction
         // Ajouter un bloc de fin pour la fonction
@@ -77,12 +86,19 @@ antlrcpp::Any CodeGenVisitor::visitDecl_stmt(ifccParser::Decl_stmtContext *ctx)
 }
 
 antlrcpp::Any CodeGenVisitor::visitSub_declWithType(ifccParser::Sub_declContext *ctx, string varType) {
+    bool isGlobalScope = (cfg==nullptr);
     string varName = ctx->VAR()->getText();
 
-    if (currentScope->isGlobalScope()) {
-        // TODO:
+    if (isGlobalScope) {
+        gvm->addGlobalVariable(varName, varType);
+
+        if (ctx->expr()) {
+            string exprCst = any_cast<string>(visit(ctx->expr()));
+            Symbol *var = gvm->getGlobalScope()->findVariable(exprCst);
+            gvm->setGlobalVariableValue(varName, var->getCstValue());
+        }
     } else {
-        currentScope->addLocalVariable(varName, varType);
+        cfg->currentScope->addLocalVariable(varName, varType);
         if (ctx->expr()) {
             string expr = any_cast<string>(visit(ctx->expr()));
             cfg->current_bb->add_IRInstr(IRInstr::Operation::copy, VarType::INT, {varName, expr});
@@ -97,7 +113,7 @@ antlrcpp::Any CodeGenVisitor::visitAssignmentStatement(ifccParser::AssignmentSta
     // Récupération du contexte de la règle assign_stmt
     auto assign = ctx->assign_stmt();
     string varName = assign->VAR()->getText();
-    Symbol *var = currentScope->findVariable(varName);
+    Symbol *var = cfg->currentScope->findVariable(varName);
     if (var == nullptr) {
         std::cerr << "error: variable " << varName << " not declared.\n";
         exit(1);
@@ -164,8 +180,13 @@ antlrcpp::Any CodeGenVisitor::visitMulDivExpression(ifccParser::MulDivExpression
 antlrcpp::Any CodeGenVisitor::visitConstantExpression(ifccParser::ConstantExpressionContext *ctx)
 {
     int value = std::stoi(ctx->CONST()->getText());
-    string temp = cfg->currentScope->addTempVariable("int");
-    cfg->current_bb->add_IRInstr(IRInstr::Operation::ldconst, VarType::INT, {temp, to_string(value)});
+    string temp;
+    if (cfg != nullptr) { // Viste le contexte lorsqu'on est dans une fonction
+        temp = cfg->currentScope->addTempConstVariable("int", value);
+        cfg->current_bb->add_IRInstr(IRInstr::ldconst, VarType::CHAR, {temp, to_string(value)});
+    } else {  // Si on est dans le contexte global
+        temp = gvm->addTempConstVariable("int", value);
+    }
     return temp;
 }
 
@@ -175,8 +196,14 @@ antlrcpp::Any CodeGenVisitor::visitConstantCharExpression(ifccParser::ConstantCh
     string value = ctx->CONST_CHAR()->getText().substr(1, 1);
     int ascii = (int)value[0];
     // Crée une variable temporaire et charge la constante dedans.
-    string temp = cfg->currentScope->addTempVariable("char");
-    cfg->current_bb->add_IRInstr(IRInstr::ldconst, VarType::CHAR, {temp, to_string(ascii)});
+    string temp;
+    if (cfg != nullptr) { // Si on est dans le contexte d'une fonction
+        temp = cfg->currentScope->addTempConstVariable("char", ascii);
+        cfg->current_bb->add_IRInstr(IRInstr::ldconst, VarType::CHAR, {temp, to_string(ascii)});
+    } else { // Si on est dans le contexte global
+        temp = gvm->addTempConstVariable("char", ascii);
+    }
+    
     return temp;
 }
 
@@ -184,7 +211,7 @@ antlrcpp::Any CodeGenVisitor::visitVariableExpression(ifccParser::VariableExpres
 {
     // On retourne simplement le nom de la variable.
     string varName = ctx->VAR()->getText();
-    Symbol *var = currentScope->findVariable(varName);
+    Symbol *var = cfg->currentScope->findVariable(varName);
     if (var == nullptr)
     {
         std::cerr << "error: variable " << varName << " not declared\n";

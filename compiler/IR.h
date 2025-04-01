@@ -88,7 +88,6 @@ public:
     DefFonction* ast; /**< The AST this CFG comes from */
 
     void add_bb(BasicBlock* bb);
-    void set_current_scope(SymbolTable* st) { currentScope = st; }
 
     // x86 code generation: could be encapsulated in a processor class in a retargetable compiler
     void gen_asm(std::ostream& o);
@@ -101,7 +100,7 @@ public:
     BasicBlock* current_bb;
 
     // On remplace ces membres par notre instance de SymbolTable
-    SymbolTable* currentScope; /**< the symbol table of the current scope */
+    SymbolTable* currentScope = nullptr; /**< the symbol table of the current scope */
 
 protected:
 
@@ -109,6 +108,24 @@ protected:
     int nextBBnumber; /**< just for naming */
 
     std::vector<BasicBlock*> bbs; /**< all the basic blocks of this CFG*/
+};
+
+
+/** The class to manage global variables */
+class GVM { // Global Variable Manager
+    public:
+        GVM();
+        void gen_asm(std::ostream& o);
+
+        void addGlobalVariable(std::string name, std::string type);
+        void setGlobalVariableValue(std::string name, int value);
+        std::string addTempConstVariable(std::string type, int value);
+
+        SymbolTable* getGlobalScope() { return globalScope; }
+
+    protected:
+        SymbolTable* globalScope; /**< the symbol table of the global scope */
+        std::map<std::string, int> globalVariableValues; /**< the values of the global variables */
 };
 
 #endif

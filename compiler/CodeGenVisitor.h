@@ -6,7 +6,7 @@
 
 class CodeGenVisitor : public ifccBaseVisitor {
 private:
-    SymbolTable *currentScope = new SymbolTable(0); //  global scope
+    GVM* gvm; // Global Variable Manager
 
 public:
     virtual antlrcpp::Any visitProg(ifccParser::ProgContext *ctx) override;

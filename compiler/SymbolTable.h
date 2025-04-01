@@ -24,20 +24,23 @@ class SymbolTable
         Symbol addLocalVariable(std::string name, std::string type); //return offset
         Symbol addGlobalVariable(std::string name, std::string type);
         std::string addTempVariable(std::string type); //return name
+        std::string addTempConstVariable(std::string type, int value); //return name
 
 
         Symbol* findVariable(std::string name); // find all var can see in the scope
         Symbol* findVariableThisScope(std::string name); //find only var in the scope
 
         void synchronize(SymbolTable *symbolTable); // synchronise les offsets des variables
-
         bool isGlobalScope();
 
         void setParent(SymbolTable *parent) { this->parent = parent; }
         SymbolTable *getParent() { return parent; }
         int getCurrentDeclOffset() { return currentDeclOffset; }
+        int getNumberVariable() { return table.size(); }
+        std::map<std::string, Symbol> getTable() { return table; }
 
         void printTable();
+        static bool isTempVariable(std::string name);
 
     private:
         std::map<std::string, Symbol> table;

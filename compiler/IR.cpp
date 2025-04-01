@@ -254,6 +254,10 @@ std::string CFG::IR_reg_to_asm(std::string& reg)
     Symbol* p = currentScope->findVariable(reg);
     if (p != nullptr)
     {
+        if (p->scopeType == GLOBAL)
+        {
+            return reg + "(%rip)";
+        }
         return "-" + to_string(p->offset) + "(%rbp)";
     }
     return reg;
@@ -275,4 +279,57 @@ void CFG::gen_asm_epilogue(std::ostream &o)
 std::string CFG::new_BB_name()
 {
     return "BB" + std::to_string(nextBBnumber++);
+}
+
+/* ---------------------- GVM ---------------------- */
+GVM::GVM()
+{
+    globalScope = new SymbolTable(0);
+}
+
+void GVM::addGlobalVariable(std::string name, std::string type)
+{
+    globalScope->addGlobalVariable(name, type);
+}
+
+void GVM::setGlobalVariableValue(std::string name, int value)
+{
+    if (globalScope->findVariableThisScope(name) != nullptr)
+    {
+        globalVariableValues[name] = value;
+    }
+    else
+    {
+        std::cerr << "error: variable '" << name << "' not declared\n";
+        exit(1);
+    }
+}
+
+std::string GVM::addTempConstVariable(std::string type, int value)
+{
+    return globalScope->addTempConstVariable(type, value);
+}
+
+void GVM::gen_asm(std::ostream &o)
+{
+    // Verifier si on a des variables globales
+    if (globalScope->getNumberVariable() == 0) return;
+
+    o << "    .data\n";
+
+    // On génère le code assembleur pour les variables globales
+    for (auto var : globalScope->getTable())
+    {
+        // check if var is temp variable
+        if (SymbolTable::isTempVariable(var.first)) continue;
+        o << "    .globl " << var.first << "\n";
+        o << var.first << ":\n";
+        if (globalVariableValues.count(var.first) == 0) {
+            o << "    .zero 4\n";
+        } else {
+            o << "    .long " << globalVariableValues[var.first] << "\n";
+        }
+    }
+
+    o << "    .text\n";
 }

@@ -38,6 +38,14 @@ std::string SymbolTable::addTempVariable(std::string type) {
     return name;
 }
 
+std::string SymbolTable::addTempConstVariable(std::string type, int value) {
+    std::string name = "!tmp" + std::to_string(currentDeclOffset);
+    Symbol p = { getType(type) , currentDeclOffset, ScopeType::BLOCK, value };
+    table[name] = p;
+    currentDeclOffset += 4;
+    return name;
+}
+
 Symbol* SymbolTable::findVariable(std::string name) {
     SymbolTable *current = this;
     while (current != nullptr) {
@@ -97,4 +105,8 @@ void SymbolTable::printTable() {
     }
     
     std::cout << "================================================" << std::endl;
+}
+
+bool SymbolTable::isTempVariable(std::string name) {
+    return name.find("!tmp") != std::string::npos;
 }
