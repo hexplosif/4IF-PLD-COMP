@@ -28,6 +28,8 @@ public:
         mul,
         div,
         mod,
+        incr,
+        decr,
         rmem,
         wmem, 
         cmp_eq,

@@ -63,6 +63,20 @@ void IRInstr::gen_asm(std::ostream &o)
         o << "    movl %edx, " << bb->cfg->IR_reg_to_asm(params[0]) << "\n";
         break;
 
+    case incr:
+        // incr: params[0] = var
+        o << "    movl " << bb->cfg->IR_reg_to_asm(params[0]) << ", %eax\n";
+        o << "    addl $1, %eax\n";
+        o << "    movl %eax, " << bb->cfg->IR_reg_to_asm(params[0]) << "\n";
+        break;
+
+    case decr:
+        // decr: params[0] = var
+        o << "    movl " << bb->cfg->IR_reg_to_asm(params[0]) << ", %eax\n";
+        o << "    subl $1, %eax\n";
+        o << "    movl %eax, " << bb->cfg->IR_reg_to_asm(params[0]) << "\n";
+        break;
+
     case cmp_eq:
         // cmp_eq: params[0] = dest, params[1] = gauche, params[2] = droite
         o << "    movl " << bb->cfg->IR_reg_to_asm(params[1]) << ", %eax\n";

@@ -67,8 +67,32 @@ antlrcpp::Any CodeGenVisitor::visitAssignmentStatement(ifccParser::AssignmentSta
     auto assign = ctx->assign_stmt();
     string varName = assign->VAR()->getText();
     // On suppose que la variable a déjà été déclarée
-    string exprResult = any_cast<string>(this->visit(assign->expr()));
-    cfg->current_bb->add_IRInstr(IRInstr::copy, Type::INT, {varName, exprResult});
+    string op = assign->op_assign()->getText();
+    if (op == "=") {
+        string exprResult = any_cast<string>(this->visit(assign->expr()));
+        cfg->current_bb->add_IRInstr(IRInstr::copy, Type::INT, {varName, exprResult});
+    }
+    else if (op == "+=") {
+        string exprResult = any_cast<string>(this->visit(assign->expr()));
+        cfg->current_bb->add_IRInstr(IRInstr::add, Type::INT, {varName, varName, exprResult});
+    }
+    else if (op == "-=") {
+        string exprResult = any_cast<string>(this->visit(assign->expr()));
+        cfg->current_bb->add_IRInstr(IRInstr::sub, Type::INT, {varName, varName, exprResult});
+    }
+    else if (op == "*=") {
+        string exprResult = any_cast<string>(this->visit(assign->expr()));
+        cfg->current_bb->add_IRInstr(IRInstr::mul, Type::INT, {varName, varName, exprResult});
+    }
+    else if (op == "/=") {
+        string exprResult = any_cast<string>(this->visit(assign->expr()));
+        cfg->current_bb->add_IRInstr(IRInstr::div, Type::INT, {varName, varName, exprResult});
+    }
+    else if (op == "%=") {
+        string exprResult = any_cast<string>(this->visit(assign->expr()));
+        cfg->current_bb->add_IRInstr(IRInstr::mod, Type::INT, {varName, varName, exprResult});
+    }
+
     return 0;
 }
 
@@ -204,6 +228,23 @@ antlrcpp::Any CodeGenVisitor::visitUnaryExpression(ifccParser::UnaryExpressionCo
     }
     return temp;
 }
+
+
+antlrcpp::Any CodeGenVisitor::visitPostIncrementExpression(ifccParser::PostIncrementExpressionContext *ctx)
+{
+    std::string varName = ctx->VAR()->getText();
+    cfg->current_bb->add_IRInstr(IRInstr::incr, Type::INT, {varName});
+    return 0;
+}
+
+
+antlrcpp::Any CodeGenVisitor::visitPostDecrementExpression(ifccParser::PostDecrementExpressionContext *ctx)
+{
+    std::string varName = ctx->VAR()->getText();
+    cfg->current_bb->add_IRInstr(IRInstr::decr, Type::INT, {varName});
+    return 0;
+}
+
 
 antlrcpp::Any CodeGenVisitor::visitFunctionCallExpression(ifccParser::FunctionCallExpressionContext *ctx)
 {
