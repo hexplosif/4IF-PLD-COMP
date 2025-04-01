@@ -1,22 +1,52 @@
-#ifndef SYMBOLTABLE_H
-#define SYMBOLTABLE_H
+#pragma once
 
+#include <iostream>
 #include <map>
-#include <string>
+#include "symbole.h"
 
-class SymbolTable {
-public:
-    SymbolTable();
-
-    // Ajoute une variable à la table si elle n'existe pas encore
-    void addSymbol(const std::string &name);
-
-    // Renvoie l'index associé à une variable
-    int getSymbolIndex(const std::string &name) const;
-
-private:
-    std::map<std::string, int> table;
-    int nextIndex; // Chaque nouvel index sera un multiple de 4
+class DefFonction {
+    public:
+        DefFonction(std::string name, VarType type) : name(name), type(type) {}
+        std::string name;
+        VarType type;
+        std::map<std::string, Symbol> params;
 };
 
-#endif
+class SymbolTable
+// classe pour la table des symboles
+// - chaque SCOPE a sa propre table des symboles
+// - chaque table des symboles a un pointeur vers la table des symboles parente (SymbolTable *parent)
+//    -> c'est le scope de la block extérieur plus proche
+{
+    public:
+        SymbolTable( int initialOffset );
+
+        Symbol addLocalVariable(std::string name, std::string type); //return offset
+        Symbol addGlobalVariable(std::string name, std::string type);
+        std::string addTempVariable(std::string type); //return name
+        std::string addTempConstVariable(std::string type, int value); //return name
+
+
+        Symbol* findVariable(std::string name); // find all var can see in the scope
+        Symbol* findVariableThisScope(std::string name); //find only var in the scope
+
+        void synchronize(SymbolTable *symbolTable); // synchronise les offsets des variables
+        bool isGlobalScope();
+
+        void setParent(SymbolTable *parent) { this->parent = parent; }
+        SymbolTable *getParent() { return parent; }
+        int getCurrentDeclOffset() { return currentDeclOffset; }
+        int getNumberVariable() { return table.size(); }
+        std::map<std::string, Symbol> getTable() { return table; }
+
+        void printTable();
+        static bool isTempVariable(std::string name);
+
+    private:
+        std::map<std::string, Symbol> table;
+        int currentDeclOffset = 0;
+
+        SymbolTable *parent = nullptr;
+
+        VarType getType(std::string strType );
+};
