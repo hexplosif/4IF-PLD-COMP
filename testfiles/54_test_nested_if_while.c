@@ -1,7 +1,7 @@
 int main() {
     int x = 0;
     while (x < 5) {
-        if (x == 3) {
+        if (x % 2 == 0) {
             x = x + 2;
         else
             x = x + 1;

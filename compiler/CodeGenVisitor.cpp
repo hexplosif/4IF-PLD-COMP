@@ -244,57 +244,52 @@ antlrcpp::Any CodeGenVisitor::visitFunctionCallExpression(ifccParser::FunctionCa
     return temp;
 }
 
-antlrcpp::Any CodeGenVisitor::visitIfStatement(ifccParser::IfStatementContext *ctx)
-{
+// Dans CodeGenVisitor.cpp, fonction visitIfStatement
+
+antlrcpp::Any CodeGenVisitor::visitIfStatement(ifccParser::IfStatementContext *ctx) {
     auto if_stmt = ctx->if_stmt();
-    // Évalue la condition
     std::string cond = any_cast<std::string>(this->visit(if_stmt->expr()));
-    // Crée un nouveau bloc pour la suite (join)
+    
     std::string joinLabel = cfg->new_BB_name();
     BasicBlock *join_bb = new BasicBlock(cfg, joinLabel);
     cfg->add_bb(join_bb);
 
-    // Crée le bloc pour la branche "then"
+    BasicBlock *current = cfg->current_bb;
+    current->test_var_name = cond;
+
+    // Création des blocs then et else
     std::string thenLabel = cfg->new_BB_name();
     BasicBlock *then_bb = new BasicBlock(cfg, thenLabel);
     cfg->add_bb(then_bb);
 
-    // Configure le bloc courant pour effectuer un saut conditionnel
-    cfg->current_bb->test_var_name = cond;
-    
-    // Vérifie s'il y a un else : si if_stmt->stmt() contient 2 instructions, la seconde est le else
-    if (if_stmt->stmt().size() > 1)
-    {
+    if (if_stmt->stmt().size() > 1) { // Cas avec else
         std::string elseLabel = cfg->new_BB_name();
         BasicBlock *else_bb = new BasicBlock(cfg, elseLabel);
         cfg->add_bb(else_bb);
 
-        cfg->current_bb->exit_true = then_bb;
-        cfg->current_bb->exit_false = else_bb;
+        current->exit_true = then_bb;
+        current->exit_false = else_bb;
 
-        // Génère la branche "then"
+        // Génération du bloc then
         cfg->current_bb = then_bb;
         this->visit(if_stmt->stmt(0));
         then_bb->add_IRInstr(IRInstr::jmp, Type::INT, {joinLabel});
 
-        // Génère la branche "else"
+        // Génération du bloc else
         cfg->current_bb = else_bb;
         this->visit(if_stmt->stmt(1));
         else_bb->add_IRInstr(IRInstr::jmp, Type::INT, {joinLabel});
-    }
-    else
-    {
-        // Pas de else : la branche fausse saute directement à join_bb
-        cfg->current_bb->exit_true = then_bb;
-        cfg->current_bb->exit_false = join_bb;
+    } else { // Cas sans else
+        current->exit_true = then_bb;
+        current->exit_false = join_bb;
 
-        // Génère la branche "then"
+        // Génération du bloc then
         cfg->current_bb = then_bb;
         this->visit(if_stmt->stmt(0));
         then_bb->add_IRInstr(IRInstr::jmp, Type::INT, {joinLabel});
     }
 
-    // La suite du code se trouve dans join_bb
+    // Le code après le if se trouve dans join_bb
     cfg->current_bb = join_bb;
     return 0;
 }
