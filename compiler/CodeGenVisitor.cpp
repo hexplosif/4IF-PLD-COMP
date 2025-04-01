@@ -319,6 +319,196 @@ antlrcpp::Any CodeGenVisitor::visitFunctionCallExpression(ifccParser::FunctionCa
     return temp;
 }
 
+antlrcpp::Any CodeGenVisitor::visitIfStatement(ifccParser::IfStatementContext *ctx)
+{
+    auto if_stmt = ctx->if_stmt();
+    // Évalue la condition
+    std::string cond = any_cast<std::string>(this->visit(if_stmt->expr()));
+    // Crée un nouveau bloc pour la suite (join)
+    std::string joinLabel = cfg->new_BB_name();
+    BasicBlock *join_bb = new BasicBlock(cfg, joinLabel);
+    cfg->add_bb(join_bb);
+
+    // Crée le bloc pour la branche "then"
+    std::string thenLabel = cfg->new_BB_name();
+    BasicBlock *then_bb = new BasicBlock(cfg, thenLabel);
+    cfg->add_bb(then_bb);
+
+    // Configure le bloc courant pour effectuer un saut conditionnel
+    cfg->current_bb->test_var_name = cond;
+    
+    // Vérifie s'il y a un else : si if_stmt->stmt() contient 2 instructions, la seconde est le else
+    if (if_stmt->stmt().size() > 1)
+    {
+        std::string elseLabel = cfg->new_BB_name();
+        BasicBlock *else_bb = new BasicBlock(cfg, elseLabel);
+        cfg->add_bb(else_bb);
+
+        cfg->current_bb->exit_true = then_bb;
+        cfg->current_bb->exit_false = else_bb;
+
+        // Génère la branche "then"
+        cfg->current_bb = then_bb;
+        this->visit(if_stmt->stmt(0));
+        then_bb->add_IRInstr(IRInstr::jmp, Type::INT, {joinLabel});
+
+        // Génère la branche "else"
+        cfg->current_bb = else_bb;
+        this->visit(if_stmt->stmt(1));
+        else_bb->add_IRInstr(IRInstr::jmp, Type::INT, {joinLabel});
+    }
+    else
+    {
+        // Pas de else : la branche fausse saute directement à join_bb
+        cfg->current_bb->exit_true = then_bb;
+        cfg->current_bb->exit_false = join_bb;
+
+        // Génère la branche "then"
+        cfg->current_bb = then_bb;
+        this->visit(if_stmt->stmt(0));
+        then_bb->add_IRInstr(IRInstr::jmp, Type::INT, {joinLabel});
+    }
+
+    // La suite du code se trouve dans join_bb
+    cfg->current_bb = join_bb;
+    return 0;
+}
+
+antlrcpp::Any CodeGenVisitor::visitWhileStatement(ifccParser::WhileStatementContext *ctx)
+{
+    auto while_stmt = ctx->while_stmt();
+    // Crée un bloc pour évaluer la condition
+    std::string condLabel = cfg->new_BB_name();
+    BasicBlock *cond_bb = new BasicBlock(cfg, condLabel);
+    cfg->add_bb(cond_bb);
+    // Ajoute un saut du bloc courant vers le bloc de condition
+    cfg->current_bb->add_IRInstr(IRInstr::jmp, Type::INT, {condLabel});
+
+    // Génère le bloc de condition
+    cfg->current_bb = cond_bb;
+    std::string cond = any_cast<std::string>(this->visit(while_stmt->expr()));
+    cond_bb->test_var_name = cond;
+
+    // Crée le bloc du corps de la boucle
+    std::string bodyLabel = cfg->new_BB_name();
+    BasicBlock *body_bb = new BasicBlock(cfg, bodyLabel);
+    cfg->add_bb(body_bb);
+
+    // Crée le bloc de sortie (après la boucle)
+    std::string joinLabel = cfg->new_BB_name();
+    BasicBlock *join_bb = new BasicBlock(cfg, joinLabel);
+    cfg->add_bb(join_bb);
+
+    // La condition détermine le chemin
+    cond_bb->exit_true = body_bb;
+    cond_bb->exit_false = join_bb;
+
+    // Génère le corps de la boucle
+    cfg->current_bb = body_bb;
+    this->visit(while_stmt->stmt());
+    // À la fin du corps, retourne vers la condition
+    body_bb->add_IRInstr(IRInstr::jmp, Type::INT, {condLabel});
+
+    // La suite du code se trouve dans join_bb
+    cfg->current_bb = join_bb;
+    return 0;
+}
+
+antlrcpp::Any CodeGenVisitor::visitIfStatement(ifccParser::IfStatementContext *ctx)
+{
+    auto if_stmt = ctx->if_stmt();
+    // Évalue la condition
+    std::string cond = any_cast<std::string>(this->visit(if_stmt->expr()));
+    // Crée un nouveau bloc pour la suite (join)
+    std::string joinLabel = cfg->new_BB_name();
+    BasicBlock *join_bb = new BasicBlock(cfg, joinLabel);
+    cfg->add_bb(join_bb);
+
+    // Crée le bloc pour la branche "then"
+    std::string thenLabel = cfg->new_BB_name();
+    BasicBlock *then_bb = new BasicBlock(cfg, thenLabel);
+    cfg->add_bb(then_bb);
+
+    // Configure le bloc courant pour effectuer un saut conditionnel
+    cfg->current_bb->test_var_name = cond;
+    
+    // Vérifie s'il y a un else : si if_stmt->stmt() contient 2 instructions, la seconde est le else
+    if (if_stmt->stmt().size() > 1)
+    {
+        std::string elseLabel = cfg->new_BB_name();
+        BasicBlock *else_bb = new BasicBlock(cfg, elseLabel);
+        cfg->add_bb(else_bb);
+
+        cfg->current_bb->exit_true = then_bb;
+        cfg->current_bb->exit_false = else_bb;
+
+        // Génère la branche "then"
+        cfg->current_bb = then_bb;
+        this->visit(if_stmt->stmt(0));
+        then_bb->add_IRInstr(IRInstr::jmp, Type::INT, {joinLabel});
+
+        // Génère la branche "else"
+        cfg->current_bb = else_bb;
+        this->visit(if_stmt->stmt(1));
+        else_bb->add_IRInstr(IRInstr::jmp, Type::INT, {joinLabel});
+    }
+    else
+    {
+        // Pas de else : la branche fausse saute directement à join_bb
+        cfg->current_bb->exit_true = then_bb;
+        cfg->current_bb->exit_false = join_bb;
+
+        // Génère la branche "then"
+        cfg->current_bb = then_bb;
+        this->visit(if_stmt->stmt(0));
+        then_bb->add_IRInstr(IRInstr::jmp, Type::INT, {joinLabel});
+    }
+
+    // La suite du code se trouve dans join_bb
+    cfg->current_bb = join_bb;
+    return 0;
+}
+
+antlrcpp::Any CodeGenVisitor::visitWhileStatement(ifccParser::WhileStatementContext *ctx)
+{
+    auto while_stmt = ctx->while_stmt();
+    // Crée un bloc pour évaluer la condition
+    std::string condLabel = cfg->new_BB_name();
+    BasicBlock *cond_bb = new BasicBlock(cfg, condLabel);
+    cfg->add_bb(cond_bb);
+    // Ajoute un saut du bloc courant vers le bloc de condition
+    cfg->current_bb->add_IRInstr(IRInstr::jmp, Type::INT, {condLabel});
+
+    // Génère le bloc de condition
+    cfg->current_bb = cond_bb;
+    std::string cond = any_cast<std::string>(this->visit(while_stmt->expr()));
+    cond_bb->test_var_name = cond;
+
+    // Crée le bloc du corps de la boucle
+    std::string bodyLabel = cfg->new_BB_name();
+    BasicBlock *body_bb = new BasicBlock(cfg, bodyLabel);
+    cfg->add_bb(body_bb);
+
+    // Crée le bloc de sortie (après la boucle)
+    std::string joinLabel = cfg->new_BB_name();
+    BasicBlock *join_bb = new BasicBlock(cfg, joinLabel);
+    cfg->add_bb(join_bb);
+
+    // La condition détermine le chemin
+    cond_bb->exit_true = body_bb;
+    cond_bb->exit_false = join_bb;
+
+    // Génère le corps de la boucle
+    cfg->current_bb = body_bb;
+    this->visit(while_stmt->stmt());
+    // À la fin du corps, retourne vers la condition
+    body_bb->add_IRInstr(IRInstr::jmp, Type::INT, {condLabel});
+
+    // La suite du code se trouve dans join_bb
+    cfg->current_bb = join_bb;
+    return 0;
+}
+
 antlrcpp::Any CodeGenVisitor::visitLogiqueParesseuxExpression(ifccParser::LogiqueParesseuxExpressionContext *ctx)
 {
     // expr op=('&&'|'||') expr
