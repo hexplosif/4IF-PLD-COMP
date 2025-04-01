@@ -9,23 +9,19 @@ private:
     GVM* gvm; // Global Variable Manager
 
 public:
+    //================================ Program ===============================
     virtual antlrcpp::Any visitProg(ifccParser::ProgContext *ctx) override;
-
-    // ==============================================================
-    //                          Statements
-    // ==============================================================
-   
     virtual antlrcpp::Any visitBlock(ifccParser::BlockContext *ctx) override;
+
+    //=============================== Statements ===============================
     virtual antlrcpp::Any visitDecl_stmt(ifccParser::Decl_stmtContext *ctx) override;
     virtual antlrcpp::Any visitSub_declWithType(ifccParser::Sub_declContext *ctx, std::string varType);
     virtual antlrcpp::Any visitAssignmentStatement(ifccParser::AssignmentStatementContext *ctx) override;
     virtual antlrcpp::Any visitReturn_stmt(ifccParser::Return_stmtContext *ctx) override;
-    
-    // ==============================================================
-    //                          Expressions
-    // ==============================================================
+    virtual antlrcpp::Any visitIfStatement(ifccParser::IfStatementContext *ctx) override;
+    virtual antlrcpp::Any visitWhileStatement(ifccParser::WhileStatementContext *ctx) override;
 
-    
+    // =============================== Expressions ===============================
     virtual antlrcpp::Any visitAddSubExpression(ifccParser::AddSubExpressionContext *ctx) override;
     virtual antlrcpp::Any visitMulDivExpression(ifccParser::MulDivExpressionContext *ctx) override;
     virtual antlrcpp::Any visitConstantExpression(ifccParser::ConstantExpressionContext *ctx) override;
