@@ -74,6 +74,10 @@ antlrcpp::Any CodeGenVisitor::visitBlock(ifccParser::BlockContext *ctx)
     return 0;
 }
 
+// ==============================================================
+//                          Statements
+// ==============================================================
+
 antlrcpp::Any CodeGenVisitor::visitDecl_stmt(ifccParser::Decl_stmtContext *ctx)
 {
     string varType = ctx->type()->getText();
@@ -94,14 +98,26 @@ antlrcpp::Any CodeGenVisitor::visitSub_declWithType(ifccParser::Sub_declContext 
 
         if (ctx->expr()) {
             string exprCst = any_cast<string>(visit(ctx->expr()));
-            Symbol *var = gvm->getGlobalScope()->findVariable(exprCst);
-            gvm->setGlobalVariableValue(varName, var->getCstValue());
+            Symbol *exprCstSymbol = findVariable(exprCst);
+
+            if (!exprCstSymbol->isConstant()) {
+                std::cerr << "error: global variable " << varName << " must be initialized with a constant expression.\n";
+                exit(1);
+            }
+
+            gvm->setGlobalVariableValue(varName, exprCstSymbol->getCstValue());
         }
     } else {
         cfg->currentScope->addLocalVariable(varName, varType);
         if (ctx->expr()) {
             string expr = any_cast<string>(visit(ctx->expr()));
-            cfg->current_bb->add_IRInstr(IRInstr::Operation::copy, VarType::INT, {varName, expr});
+            Symbol *exprSymbol = findVariable(expr);
+            if (exprSymbol->isConstant()) {
+                cfg->current_bb->add_IRInstr(IRInstr::ldconst, VarType::INT, {varName, to_string(exprSymbol->getCstValue())});
+                freeLastTempVariable(1);
+            } else{
+                cfg->current_bb->add_IRInstr(IRInstr::copy, VarType::INT, {varName, expr});
+            }
         }
     }
 
@@ -113,7 +129,7 @@ antlrcpp::Any CodeGenVisitor::visitAssignmentStatement(ifccParser::AssignmentSta
     // Récupération du contexte de la règle assign_stmt
     auto assign = ctx->assign_stmt();
     string varName = assign->VAR()->getText();
-    Symbol *var = cfg->currentScope->findVariable(varName);
+    Symbol *var = findVariable(varName);
     if (var == nullptr) {
         std::cerr << "error: variable " << varName << " not declared.\n";
         exit(1);
@@ -121,7 +137,13 @@ antlrcpp::Any CodeGenVisitor::visitAssignmentStatement(ifccParser::AssignmentSta
 
     // On suppose que la variable a déjà été déclarée
     string exprResult = any_cast<string>(this->visit(assign->expr()));
-    cfg->current_bb->add_IRInstr(IRInstr::copy, VarType::INT, {varName, exprResult});
+    Symbol *exprSymbol = findVariable(exprResult);
+    if (exprSymbol->isConstant()) {
+        cfg->current_bb->add_IRInstr(IRInstr::ldconst, VarType::INT, {varName, to_string(exprSymbol->getCstValue())});
+        freeLastTempVariable(1);
+    } else{
+        cfg->current_bb->add_IRInstr(IRInstr::copy, VarType::INT, {varName, exprResult});
+    }
     return 0;
 }
 
@@ -129,14 +151,26 @@ antlrcpp::Any CodeGenVisitor::visitReturn_stmt(ifccParser::Return_stmtContext *c
 {
     // Évalue l'expression de retour
     std::string exprResult = any_cast<std::string>(this->visit(ctx->expr()));
-    // Copie le résultat dans la variable spéciale "ret" ("ret" ne marche pas avec LINUX)
-    cfg->current_bb->add_IRInstr(IRInstr::copy, VarType::INT, {"%eax", exprResult});
+    Symbol *exprSymbol = findVariable(exprResult);
+    if (exprSymbol->isConstant()) {
+        // Copie le résultat dans la variable spéciale "ret" ("ret" ne marche pas avec LINUX)
+        cfg->current_bb->add_IRInstr(IRInstr::ldconst, VarType::INT, {"%eax", to_string(exprSymbol->getCstValue())});
+        freeLastTempVariable(1);
+    } else {
+        // Copie le résultat dans la variable spéciale "ret" ("ret" ne marche pas avec LINUX)
+        cfg->current_bb->add_IRInstr(IRInstr::copy, VarType::INT, {"%eax", exprResult});
+    }
+    
     // Ajoute un saut vers l'épilogue
     cfg->current_bb->add_IRInstr(IRInstr::jmp, VarType::INT, {".Lepilogue"});
     // Marquer le bloc courant comme terminé en le vidant (ou en le désactivant)
     cfg->current_bb = nullptr; // On n'ajoutera plus d'instructions dans ce bloc.
     return exprResult;
 }
+
+// ==============================================================
+//                          Expressions
+// ==============================================================
 
 antlrcpp::Any CodeGenVisitor::visitAddSubExpression(ifccParser::AddSubExpressionContext *ctx)
 {
@@ -151,6 +185,10 @@ antlrcpp::Any CodeGenVisitor::visitAddSubExpression(ifccParser::AddSubExpression
     else if (ctx->op->getText() == "-")
     {
         op = IRInstr::Operation::sub;
+    }
+
+    if (constantOptimizeBinaryOp(left, right, op) != NOT_CONST_OPTI) {
+        return constantOptimizeBinaryOp(left, right, op);
     }
     
     string tmp = cfg->currentScope->addTempVariable("int");
@@ -171,6 +209,10 @@ antlrcpp::Any CodeGenVisitor::visitMulDivExpression(ifccParser::MulDivExpression
     } else if (ctx->OPM()->getText() == "%") {
         op = IRInstr::Operation::mod;
     }
+
+    if (constantOptimizeBinaryOp(left, right, op) != NOT_CONST_OPTI) {
+        return constantOptimizeBinaryOp(left, right, op);
+    }
     
     string tmp = cfg->currentScope->addTempVariable("int");
     cfg->current_bb->add_IRInstr(op, VarType::INT, {tmp, left, right});
@@ -180,13 +222,7 @@ antlrcpp::Any CodeGenVisitor::visitMulDivExpression(ifccParser::MulDivExpression
 antlrcpp::Any CodeGenVisitor::visitConstantExpression(ifccParser::ConstantExpressionContext *ctx)
 {
     int value = std::stoi(ctx->CONST()->getText());
-    string temp;
-    if (cfg != nullptr) { // Viste le contexte lorsqu'on est dans une fonction
-        temp = cfg->currentScope->addTempConstVariable("int", value);
-        cfg->current_bb->add_IRInstr(IRInstr::ldconst, VarType::CHAR, {temp, to_string(value)});
-    } else {  // Si on est dans le contexte global
-        temp = gvm->addTempConstVariable("int", value);
-    }
+    string temp = addTempConstVariable("int", value);
     return temp;
 }
 
@@ -196,14 +232,7 @@ antlrcpp::Any CodeGenVisitor::visitConstantCharExpression(ifccParser::ConstantCh
     string value = ctx->CONST_CHAR()->getText().substr(1, 1);
     int ascii = (int)value[0];
     // Crée une variable temporaire et charge la constante dedans.
-    string temp;
-    if (cfg != nullptr) { // Si on est dans le contexte d'une fonction
-        temp = cfg->currentScope->addTempConstVariable("char", ascii);
-        cfg->current_bb->add_IRInstr(IRInstr::ldconst, VarType::CHAR, {temp, to_string(ascii)});
-    } else { // Si on est dans le contexte global
-        temp = gvm->addTempConstVariable("char", ascii);
-    }
-    
+    string temp = addTempConstVariable("char", ascii);
     return temp;
 }
 
@@ -211,7 +240,8 @@ antlrcpp::Any CodeGenVisitor::visitVariableExpression(ifccParser::VariableExpres
 {
     // On retourne simplement le nom de la variable.
     string varName = ctx->VAR()->getText();
-    Symbol *var = cfg->currentScope->findVariable(varName);
+    Symbol *var = findVariable(varName);
+
     if (var == nullptr)
     {
         std::cerr << "error: variable " << varName << " not declared\n";
@@ -232,20 +262,28 @@ antlrcpp::Any CodeGenVisitor::visitComparisonExpression(ifccParser::ComparisonEx
     string left = any_cast<string>(this->visit(ctx->expr(0)));
     string right = any_cast<string>(this->visit(ctx->expr(1)));
     string temp = cfg->currentScope->addTempVariable("int");
+
     string op = ctx->op->getText();
-    if(op == "==") {
-        cfg->current_bb->add_IRInstr(IRInstr::cmp_eq, VarType::INT, {temp, left, right});
+    IRInstr::Operation cmpOp;
+    if (op == "==") {
+        cmpOp = IRInstr::cmp_eq;
     } else if (op == "!=") {
-        cfg->current_bb->add_IRInstr(IRInstr::cmp_ne, VarType::INT, {temp, left, right});
-    } else if(op == "<") {
-        cfg->current_bb->add_IRInstr(IRInstr::cmp_lt, VarType::INT, {temp, left, right});
-    } else if(op == "<=") {
-        cfg->current_bb->add_IRInstr(IRInstr::cmp_le, VarType::INT, {temp, left, right});
-    } else if(op == ">") {
-        cfg->current_bb->add_IRInstr(IRInstr::cmp_gt, VarType::INT, {temp, left, right});
-    } else if(op == ">=") {
-        cfg->current_bb->add_IRInstr(IRInstr::cmp_ge, VarType::INT, {temp, left, right});
+        cmpOp = IRInstr::cmp_ne;
+    } else if (op == "<") {
+        cmpOp = IRInstr::cmp_lt;
+    } else if (op == "<=") {
+        cmpOp = IRInstr::cmp_le;
+    } else if (op == ">") {
+        cmpOp = IRInstr::cmp_gt;
+    } else if (op == ">=") {
+        cmpOp = IRInstr::cmp_ge;
     }
+
+    if (constantOptimizeBinaryOp(left, right, cmpOp) != NOT_CONST_OPTI) {
+        return constantOptimizeBinaryOp(left, right, cmpOp);
+    }
+
+    cfg->current_bb->add_IRInstr(cmpOp, VarType::INT, {temp, left, right});
     return temp;
 }
 
@@ -255,14 +293,22 @@ antlrcpp::Any CodeGenVisitor::visitBitwiseExpression(ifccParser::BitwiseExpressi
     string left = any_cast<string>(this->visit(ctx->expr(0)));
     string right = any_cast<string>(this->visit(ctx->expr(1)));
     string temp = cfg->currentScope->addTempVariable("int");
+
     string op = ctx->op->getText();
-    if(op == "&") {
-        cfg->current_bb->add_IRInstr(IRInstr::bit_and, VarType::INT, {temp, left, right});
-    } else if(op == "|") {
-        cfg->current_bb->add_IRInstr(IRInstr::bit_or, VarType::INT, {temp, left, right});
-    } else if(op == "^") {
-        cfg->current_bb->add_IRInstr(IRInstr::bit_xor, VarType::INT, {temp, left, right});
+    IRInstr::Operation bitOp;
+    if (op == "&") {
+        bitOp = IRInstr::bit_and;
+    } else if (op == "|") {
+        bitOp = IRInstr::bit_or;
+    } else if (op == "^") {
+        bitOp = IRInstr::bit_xor;
     }
+
+    if (constantOptimizeBinaryOp(left, right, bitOp) != NOT_CONST_OPTI) {
+        return constantOptimizeBinaryOp(left, right, bitOp);
+    }
+
+    cfg->current_bb->add_IRInstr(bitOp, VarType::INT, {temp, left, right});
     return temp;
 }
 
@@ -271,12 +317,20 @@ antlrcpp::Any CodeGenVisitor::visitUnaryExpression(ifccParser::UnaryExpressionCo
     // op=('-'|'!') expr
     string expr = any_cast<string>(this->visit(ctx->expr()));
     string temp = cfg->currentScope->addTempVariable("int");
+
     string op = ctx->op->getText();
-    if(op == "-") {
-        cfg->current_bb->add_IRInstr(IRInstr::unary_minus, VarType::INT, {temp, expr});
-    } else if(op == "!") {
-        cfg->current_bb->add_IRInstr(IRInstr::not_op, VarType::INT, {temp, expr});
+    IRInstr::Operation unaryOp;
+    if (op == "-") {
+        unaryOp = IRInstr::unary_minus;
+    } else if (op == "!") {
+        unaryOp = IRInstr::not_op;
     }
+
+    if (constantOptimizeUnaryOp(expr, unaryOp) != NOT_CONST_OPTI) {
+        return constantOptimizeUnaryOp(expr, unaryOp);
+    }
+    cfg->current_bb->add_IRInstr(unaryOp, VarType::INT, {temp, expr});
+
     return temp;
 }
 
@@ -306,7 +360,15 @@ antlrcpp::Any CodeGenVisitor::visitFunctionCallExpression(ifccParser::FunctionCa
     for (size_t i = 0; i < args.size(); i++)
     {
         std::string arg = any_cast<std::string>(this->visit(args[i]));
-        cfg->current_bb->add_IRInstr(IRInstr::copy, VarType::INT, {argRegs[i], arg});
+        Symbol *argSymbol = findVariable(arg);
+
+        if (argSymbol->isConstant()) {
+            cfg->current_bb->add_IRInstr(IRInstr::ldconst, VarType::INT, {argRegs[i], to_string(argSymbol->getCstValue()) });
+            freeLastTempVariable(1);
+        } else {
+            cfg->current_bb->add_IRInstr(IRInstr::copy, VarType::INT, {argRegs[i], arg});
+        }
+        
     }
 
     // Call the function
@@ -317,4 +379,127 @@ antlrcpp::Any CodeGenVisitor::visitFunctionCallExpression(ifccParser::FunctionCa
     cfg->current_bb->add_IRInstr(IRInstr::copy, VarType::INT, {temp, "%eax"});
 
     return temp;
+}
+
+// ==============================================================
+//                          Constants Optimization
+// ==============================================================
+std::string CodeGenVisitor::constantOptimizeBinaryOp(std::string &left, std::string &right, IRInstr::Operation op) {
+    Symbol *leftSymbol = findVariable(left);
+    Symbol *rightSymbol = findVariable(right);
+
+    if (leftSymbol->isConstant() && rightSymbol->isConstant()) {
+        // Si les deux opérandes sont des constantes, on peut évaluer l'expression directement.
+        int resultValue = getConstantResultBinaryOp(leftSymbol->getCstValue(), rightSymbol->getCstValue(), op);
+        freeLastTempVariable(2);
+
+        return addTempConstVariable("int", resultValue);
+
+    } 
+
+    if (leftSymbol->isConstant()) {
+        cfg->current_bb->add_IRInstr(IRInstr::ldconst, VarType::INT, {left, right});
+    } 
+    
+    if (rightSymbol->isConstant()) {
+        cfg->current_bb->add_IRInstr(IRInstr::ldconst, VarType::INT, {right, left});
+    }
+
+    return NOT_CONST_OPTI;
+}
+
+int CodeGenVisitor::getConstantResultBinaryOp(int leftValue, int rightValue, IRInstr::Operation op) {
+    switch (op) {
+        case IRInstr::Operation::add:
+            return leftValue + rightValue;
+        case IRInstr::Operation::sub:
+            return leftValue - rightValue;
+        case IRInstr::Operation::mul:
+            return leftValue * rightValue;
+        case IRInstr::Operation::div:
+            return leftValue / rightValue;
+        case IRInstr::Operation::mod:
+            return leftValue % rightValue;
+
+        case IRInstr::Operation::cmp_eq:
+            return (leftValue == rightValue) ? 1 : 0;
+        case IRInstr::Operation::cmp_ne:
+            return (leftValue != rightValue) ? 1 : 0;
+        case IRInstr::Operation::cmp_lt:
+            return (leftValue < rightValue) ? 1 : 0;
+        case IRInstr::Operation::cmp_le:
+            return (leftValue <= rightValue) ? 1 : 0;
+        case IRInstr::Operation::cmp_gt:
+            return (leftValue > rightValue) ? 1 : 0;
+        case IRInstr::Operation::cmp_ge:
+            return (leftValue >= rightValue) ? 1 : 0;
+
+        case IRInstr::Operation::bit_and:
+            return leftValue & rightValue;
+        case IRInstr::Operation::bit_or:
+            return leftValue | rightValue;
+        case IRInstr::Operation::bit_xor:
+            return leftValue ^ rightValue;
+
+        default:
+            std::cerr << "error: unsupported operation for constant optimization\n";
+            exit(1);
+    }
+}
+
+std::string CodeGenVisitor::constantOptimizeUnaryOp(std::string &expr, IRInstr::Operation op) {
+    Symbol *exprSymbol = findVariable(expr);
+
+    if (exprSymbol->isConstant()) {
+        // Si l'opérande est une constante, on peut évaluer l'expression directement.
+        int resultValue = getConstantResultUnaryOp(exprSymbol->getCstValue(), op);
+        freeLastTempVariable(1);
+        return addTempConstVariable("int", resultValue);
+    }
+
+    return NOT_CONST_OPTI;
+}
+
+int CodeGenVisitor::getConstantResultUnaryOp(int cstValue, IRInstr::Operation op) {
+    switch (op) {
+        case IRInstr::Operation::unary_minus:
+            return -cstValue;
+        case IRInstr::Operation::not_op:
+            return !cstValue;
+        default:
+            std::cerr << "error: unsupported operation for constant optimization\n";
+            exit(1);
+    }
+}
+
+// ==============================================================
+//                          Others
+// ==============================================================
+Symbol* CodeGenVisitor::findVariable(std::string varName)
+{
+    if (cfg == nullptr) {   // Si on est dans le contexte global
+        return gvm->getGlobalScope()->findVariable(varName);
+    } else {                // Si on est dans le contexte d'une fonction
+        return cfg->currentScope->findVariable(varName);
+    }
+}
+
+void CodeGenVisitor::freeLastTempVariable(int nbVar = 1)
+{
+    for (int i = 0; i < nbVar; i++) {
+        if (cfg != nullptr) {
+            cfg->currentScope->freeLastTempVariable();
+        } else {
+            gvm->getGlobalScope()->freeLastTempVariable();
+        }
+    }
+}
+
+std::string CodeGenVisitor::addTempConstVariable(std::string type, int value)
+{
+    if (cfg != nullptr) {
+        return cfg->currentScope->addTempConstVariable(type, value);
+    } else {
+        return gvm->addTempConstVariable(type, value);
+    }
 }

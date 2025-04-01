@@ -46,6 +46,23 @@ std::string SymbolTable::addTempConstVariable(std::string type, int value) {
     return name;
 }
 
+void SymbolTable::freeLastTempVariable() {
+    if (currentDeclOffset > 0) {
+        currentDeclOffset -= 4;
+        std::string name = "!tmp" + std::to_string(currentDeclOffset);
+
+        if (table.find(name) == table.end()) {
+            std::cerr << "error: temp variable '" << name << "' not found\n";
+            exit(1);
+        }
+        table.erase(name);
+    }
+    else {
+        std::cerr << "error: no temp variable to free\n";
+        exit(1);
+    }
+}
+
 Symbol* SymbolTable::findVariable(std::string name) {
     SymbolTable *current = this;
     while (current != nullptr) {
