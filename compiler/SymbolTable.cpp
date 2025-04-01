@@ -7,16 +7,27 @@ SymbolTable::SymbolTable(int initialOffset)
     this->currentDeclOffset = initialOffset;
 }
 
-int SymbolTable::addLocalVariable(std::string name, std::string type)
+int SymbolTable::addLocalVariable(std::string name, std::string type, int size, bool isArray) 
 {
-    if (findVariableThisScope(name) == nullptr)
+    if (findVariableThisScope(name) == nullptr) 
     {
-        SymbolParameters p = {getType(type), currentDeclOffset, SymbolScopeType::BLOCK};
-        table[name] = p;
-        currentDeclOffset += 4;
-        return currentDeclOffset - 4;
-    }
-    else
+        if (isArray) 
+        {
+            int offset = currentDeclOffset - size; 
+            SymbolParameters p = {getType(type), offset, SymbolScopeType::BLOCK};
+            table[name] = p;
+            currentDeclOffset = offset; 
+            return offset;
+        }
+        else
+        {
+            SymbolParameters p = {getType(type), currentDeclOffset, SymbolScopeType::BLOCK};
+            table[name] = p;
+            currentDeclOffset += 4;
+            return currentDeclOffset - 4;
+        }
+    } 
+    else 
     {
         std::cerr << "error: variable '" << name << "' has already declared" << std::endl;
         exit(1);

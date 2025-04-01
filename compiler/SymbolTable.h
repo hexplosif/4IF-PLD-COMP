@@ -31,7 +31,7 @@ class SymbolTable
 {
   public:
     SymbolTable(int initialOffset);
-    int addLocalVariable(std::string name, std::string type); // return offset
+    int addLocalVariable(std::string name, std::string type, int size = 4, bool isArray = false); 
     void addGlobalVariable(std::string name, std::string type);
 
     SymbolParameters *findVariable(std::string name);          // find all var can see in the scope

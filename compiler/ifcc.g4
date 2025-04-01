@@ -15,8 +15,8 @@ stmt:
 
 decl_stmt:
 	type sub_decl (',' sub_decl)* ';'; // Déclaration avec ou sans affectation
-sub_decl: VAR ('=' expr)?; // Sub-règle pour les déclarations
-assign_stmt: VAR op_assign expr ';';
+sub_decl: VAR ('=' expr)? | VAR '[' CONST ']';
+assign_stmt: (VAR | VAR '[' expr ']') op_assign expr ';';
 op_assign: '=' | '+=' | '-=' | '*=' | '/=' | '%=';
 return_stmt: 'return' expr ';'; // On retourne une expression
 
@@ -25,7 +25,8 @@ expr:
 	// Expression atomique:
 	'(' expr ')'	# ParenthesisExpression
 	| VAR			# VariableExpression
-	| CONST			# ConstantExpression
+	| VAR '[' expr ']'		# ArrayAccessExpression
+    | CONST			# ConstantExpression
 	| CONST_CHAR	# ConstantCharExpression
 	// Precedence 1:
 	| op = ('-' | '!') expr				# UnaryLogicalNotExpression

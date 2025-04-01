@@ -120,123 +120,197 @@ antlrcpp::Any CodeGenVisitor::visitDecl_stmt(ifccParser::Decl_stmtContext *ctx)
 antlrcpp::Any CodeGenVisitor::visitSub_declWithType(ifccParser::Sub_declContext *ctx, std::string varType)
 {
     std::string varName = ctx->VAR()->getText();
+    if (ctx->CONST() != nullptr) { // C'est un tableaux
+        int arraySize = std::stoi(ctx->CONST()->getText()); // Taille du tableau
 
-    std::string varAddr;
-    if (currentScope->isGlobalScope())
-    { // si on est dans le scope global
-        currentScope->addGlobalVariable(varName, varType);
-
-        // On vérifie si la variable est initialisée avec une constante
-        if (ctx->expr() && !isExprIsConstant(ctx->expr()))
-        {
-            std::cerr << "error: global variable must be initialized with a constant" << std::endl;
-            exit(1);
+        if (currentScope->isGlobalScope()) {
+            currentScope->addGlobalVariable(varName, varType);
+            std::cout << "    .globl " << varName << std::endl;
+            std::cout << varName << ":" << std::endl;
+            std::cout << "    .zero " << (arraySize * 4) << std::endl; // Réserver de l'espace pour le tableau
+        } else {
+            int arraySize = std::stoi(ctx->CONST()->getText());
+            int arrayBytes = arraySize * 4;
+            int offset = currentScope->addLocalVariable(varName, varType, arrayBytes, true); 
+            std::cout << "    subq $" << arrayBytes << ", %rsp" << std::endl;
         }
+    }
+    else {
+        std::string varAddr;
+        if (currentScope->isGlobalScope())
+        { // si on est dans le scope global
+            currentScope->addGlobalVariable(varName, varType);
 
-        // on declare la variable
-        std::cout << "    .globl " << varName << std::endl;
-        std::cout << varName << ":" << std::endl;
+            // On vérifie si la variable est initialisée avec une constante
+            if (ctx->expr() && !isExprIsConstant(ctx->expr()))
+            {
+                std::cerr << "error: global variable must be initialized with a constant" << std::endl;
+                exit(1);
+            }
 
-        if (ctx->expr())
-        {
-            int value = getConstantValueFromExpr(ctx->expr());
-            std::cout << "    .long " << value << std::endl;
+            // on declare la variable
+            std::cout << "    .globl " << varName << std::endl;
+            std::cout << varName << ":" << std::endl;
+
+            if (ctx->expr())
+            {
+                int value = getConstantValueFromExpr(ctx->expr());
+                std::cout << "    .long " << value << std::endl;
+            }
+            else
+            {
+                std::cout << "    .zero 4" << std::endl;
+            }
         }
         else
-        {
-            std::cout << "    .zero 4" << std::endl;
+        { // sinon, on est dans le scope d'une fonction ou d'un block
+            std::cout << "    #    Local Sub_decl: " << varName << std::endl;
+            int offset = currentScope->addLocalVariable(varName, varType);
+            varAddr = std::to_string(offset) + "(%rbp)";
+
+            if (ctx->expr())
+            {
+                visit(ctx->expr());
+                std::cout << "    movl %eax, " << offset << "(%rbp)" << std::endl;
+            }
         }
     }
-    else
-    { // sinon, on est dans le scope d'une fonction ou d'un block
-        std::cout << "    #    Local Sub_decl: " << varName << std::endl;
-        int offset = currentScope->addLocalVariable(varName, varType);
-        varAddr = std::to_string(offset) + "(%rbp)";
-
-        if (ctx->expr())
-        {
-            visit(ctx->expr());
-            std::cout << "    movl %eax, " << offset << "(%rbp)" << std::endl;
-        }
-    }
-
     return 0;
 }
 
 // Gestion de l'affectation à une variable déjà déclarée
 antlrcpp::Any CodeGenVisitor::visitAssign_stmt(ifccParser::Assign_stmtContext *ctx)
 {
-    std::string varName = ctx->VAR()->getText();
-    SymbolParameters *var = currentScope->findVariable(varName);
-    if (var == nullptr)
-    {
-        std::cerr << "error: variable " << varName << " not declared." << std::endl;
-        exit(1);
-    }
-
-    std::string op = ctx->op_assign()->getText();
-
-    if (op == "+=" || op == "-=" || op == "*=" || op == "/=" || op == "%=")
-    {
-        if (var->scopeType == SymbolScopeType::GLOBAL)
-        {
-            std::cout << "    movl " << varName << "(%rip), %eax" << std::endl;
+    if (ctx->VAR() != nullptr && ctx->expr(0) != nullptr && ctx->getText().find("[") != std::string::npos) {
+        std::string arrayName = ctx->VAR()->getText(); // Nom du tableau
+        SymbolParameters *array = currentScope->findVariable(arrayName);
+        if (array == nullptr) {
+            std::cerr << "error: array " << arrayName << " not declared." << std::endl;
+            exit(1);
         }
-        else
-        {
-            std::cout << "    movl " << var->offset << "(%rbp), %eax" << std::endl;
-        }
+
+        // Évaluer l'indice du tableau
+        visit(ctx->expr(0)); // L'indice est évalué dans %eax
         std::cout << "    pushq %rax" << std::endl;
-        visit(ctx->expr());
+        // Évaluer la valeur à affecter
+        visit(ctx->expr(1)); // La valeur est évaluée dans %eax
+
+        std::string op = ctx->op_assign()->getText();
         std::cout << "    popq %rcx" << std::endl;
 
-        std::cout << "    movl %eax, %ebx" << std::endl;
-        std::cout << "    movl %ecx, %eax" << std::endl;
-        std::cout << "    movl %ebx, %ecx" << std::endl;
-        if (op == "+=")
-        {
-            std::cout << "    addl %ecx, %eax" << std::endl;
-        }
-        else if (op == "-=")
-        {
-            std::cout << "    subl %ecx, %eax" << std::endl;
-        }
-        else if (op == "*=")
-        {
-            std::cout << "    imull %ecx, %eax" << std::endl;
-        }
-        else if (op == "/=" || op == "%=")
-        {
-            std::cout << "    cltd" << std::endl;
-            std::cout << "    idivl %ecx" << std::endl;
-            if (op == "%=")
-            {
-                std::cout << "    movl %edx, %eax" << std::endl;
+        if (op == "=") {
+            // Affectation simple
+            if (array->scopeType == SymbolScopeType::GLOBAL) {
+                std::cout << "    movl %eax, " << arrayName << "(,%ecx,4)" << std::endl;
+            } else {
+                std::cout << "    movl %eax, " << array->offset << "(%rbp,%rcx,4)" << std::endl;
+            }
+        } else if (op == "+=" || op == "-=" || op == "*=" || op == "/=" || op == "%=") {
+            // Opérateurs composés
+            if (array->scopeType == SymbolScopeType::GLOBAL) {
+                std::cout << "    movl " << arrayName << "(,%ecx,4), %eax" << std::endl;
+            } else {
+                std::cout << "    movl " << array->offset << "(%rbp,%ecx,4), %eax" << std::endl;
+            }
+            std::cout << "    pushq %rax" << std::endl; // Sauvegarder la valeur actuelle dans la pile
+            visit(ctx->expr(1)); // Évaluer la nouvelle expression
+            std::cout << "    popq %rcx" << std::endl; // Récupérer la valeur actuelle dans %rcx
+
+            if (op == "+=") {
+                std::cout << "    addl %ecx, %eax" << std::endl;
+            } else if (op == "-=") {
+                std::cout << "    subl %ecx, %eax" << std::endl;
+            } else if (op == "*=") {
+                std::cout << "    imull %ecx, %eax" << std::endl;
+            } else if (op == "/=" || op == "%=") {
+                std::cout << "    cltd" << std::endl;
+                std::cout << "    idivl %ecx" << std::endl;
+                if (op == "%=") {
+                    std::cout << "    movl %edx, %eax" << std::endl;
+                }
+            }
+
+            // Sauvegarder le résultat dans le tableau
+            if (array->scopeType == SymbolScopeType::GLOBAL) {
+                std::cout << "    movl %eax, " << arrayName << "(,%ecx,4)" << std::endl;
+            } else {
+                std::cout << "    movl %eax, " << array->offset << "(%rbp,%ecx,4)" << std::endl;
             }
         }
-
-        if (var->scopeType == SymbolScopeType::GLOBAL)
+    }
+    // Affectation à une variable simple
+    else {
+        std::string varName = ctx->VAR()->getText();
+        SymbolParameters *var = currentScope->findVariable(varName);
+        if (var == nullptr)
         {
-            std::cout << "    movl %eax, " << varName << "(%rip)" << std::endl;
+            std::cerr << "error: variable " << varName << " not declared." << std::endl;
+            exit(1);
         }
-        else
+
+        std::string op = ctx->op_assign()->getText();
+
+        if (op == "+=" || op == "-=" || op == "*=" || op == "/=" || op == "%=")
         {
-            std::cout << "    movl %eax, " << var->offset << "(%rbp)" << std::endl;
+            if (var->scopeType == SymbolScopeType::GLOBAL)
+            {
+                std::cout << "    movl " << varName << "(%rip), %eax" << std::endl;
+            }
+            else
+            {
+                std::cout << "    movl " << var->offset << "(%rbp), %eax" << std::endl;
+            }
+            std::cout << "    pushq %rax" << std::endl;
+            visit(ctx->expr(0));
+            std::cout << "    popq %rcx" << std::endl;
+
+            std::cout << "    movl %eax, %ebx" << std::endl;
+            std::cout << "    movl %ecx, %eax" << std::endl;
+            std::cout << "    movl %ebx, %ecx" << std::endl;
+            if (op == "+=")
+            {
+                std::cout << "    addl %ecx, %eax" << std::endl;
+            }
+            else if (op == "-=")
+            {
+                std::cout << "    subl %ecx, %eax" << std::endl;
+            }
+            else if (op == "*=")
+            {
+                std::cout << "    imull %ecx, %eax" << std::endl;
+            }
+            else if (op == "/=" || op == "%=")
+            {
+                std::cout << "    cltd" << std::endl;
+                std::cout << "    idivl %ecx" << std::endl;
+                if (op == "%=")
+                {
+                    std::cout << "    movl %edx, %eax" << std::endl;
+                }
+            }
+
+            if (var->scopeType == SymbolScopeType::GLOBAL)
+            {
+                std::cout << "    movl %eax, " << varName << "(%rip)" << std::endl;
+            }
+            else
+            {
+                std::cout << "    movl %eax, " << var->offset << "(%rbp)" << std::endl;
+            }
+        }
+        else if (op == "=")
+        {
+            visit(ctx->expr(0));
+            if (var->scopeType == SymbolScopeType::GLOBAL)
+            {
+                std::cout << "    movl %eax, " << varName << "(%rip)" << std::endl;
+            }
+            else
+            {
+                std::cout << "    movl %eax, " << var->offset << "(%rbp)" << std::endl;
+            }
         }
     }
-    else if (op == "=")
-    {
-        visit(ctx->expr());
-        if (var->scopeType == SymbolScopeType::GLOBAL)
-        {
-            std::cout << "    movl %eax, " << varName << "(%rip)" << std::endl;
-        }
-        else
-        {
-            std::cout << "    movl %eax, " << var->offset << "(%rbp)" << std::endl;
-        }
-    }
-
     return 0;
 }
 // Gestion de l'instruction return
@@ -428,6 +502,31 @@ antlrcpp::Any CodeGenVisitor::visitVariableExpression(ifccParser::VariableExpres
     else
     {
         std::cout << "    movl " << var->offset << "(%rbp), %eax" << std::endl;
+    }
+
+    return 0;
+}
+
+
+antlrcpp::Any CodeGenVisitor::visitArrayAccessExpression(ifccParser::ArrayAccessExpressionContext *ctx)
+{
+    std::string arrayName = ctx->VAR()->getText(); // Nom du tableau
+    SymbolParameters *array = currentScope->findVariable(arrayName);
+    if (array == nullptr) {
+        std::cerr << "error: array " << arrayName << " not declared." << std::endl;
+        exit(1);
+    }
+
+    // Évaluer l'indice du tableau
+    visit(ctx->expr()); // L'indice est évalué dans %eax
+
+    if (array->scopeType == SymbolScopeType::GLOBAL) {
+        // Accès à un tableau global
+        std::cout << "    movl " << arrayName << "(,%rax,4), %eax" << std::endl;
+    } else {
+        // Accès à un tableau local
+        std::cout << "    movl " << array->offset << "(%rbp,%rax,4), %eax" << std::endl;
+        
     }
 
     return 0;
