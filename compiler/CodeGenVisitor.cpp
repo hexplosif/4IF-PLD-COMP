@@ -338,3 +338,18 @@ antlrcpp::Any CodeGenVisitor::visitWhileStatement(ifccParser::WhileStatementCont
     cfg->current_bb = join_bb;
     return 0;
 }
+
+antlrcpp::Any CodeGenVisitor::visitLogiqueParesseuxExpression(ifccParser::LogiqueParesseuxExpressionContext *ctx)
+ {
+     // expr op=('&&'|'||') expr
+     string left = any_cast<string>(this->visit(ctx->expr(0)));
+     string right = any_cast<string>(this->visit(ctx->expr(1)));
+     string temp = cfg->create_new_tempvar(Type::INT);
+     string op = ctx->op->getText();
+     if(op == "&&") {
+         cfg->current_bb->add_IRInstr(IRInstr::log_and, Type::INT, {temp, left, right});
+     } else if(op == "||") {
+         cfg->current_bb->add_IRInstr(IRInstr::log_or, Type::INT, {temp, left, right});
+     }
+     return temp;
+ }
