@@ -40,6 +40,8 @@ public:
         bit_xor,
         unary_minus,
         not_op,
+        log_and,
+        log_or,
         call,
         jmp
     } Operation;

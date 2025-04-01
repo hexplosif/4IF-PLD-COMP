@@ -318,3 +318,18 @@ antlrcpp::Any CodeGenVisitor::visitFunctionCallExpression(ifccParser::FunctionCa
 
     return temp;
 }
+
+antlrcpp::Any CodeGenVisitor::visitLogiqueParesseuxExpression(ifccParser::LogiqueParesseuxExpressionContext *ctx)
+{
+    // expr op=('&&'|'||') expr
+    string left = any_cast<string>(this->visit(ctx->expr(0)));
+    string right = any_cast<string>(this->visit(ctx->expr(1)));
+    string temp = cfg->currentScope->addTempVariable("int");
+    string op = ctx->op->getText();
+    if(op == "&&") {
+        cfg->current_bb->add_IRInstr(IRInstr::log_and, VarType::INT, {temp, left, right});
+    } else if(op == "||") {
+        cfg->current_bb->add_IRInstr(IRInstr::log_or, VarType::INT, {temp, left, right});
+    }
+    return temp;
+}
