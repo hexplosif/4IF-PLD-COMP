@@ -63,6 +63,88 @@ void IRInstr::gen_asm(std::ostream &o)
         o << "    movl %edx, " << bb->cfg->IR_reg_to_asm(params[0]) << "\n";
         break;
 
+    case copyTblx:
+    {
+        // copy: params[0] = destination, params[1] = expr, params[2] = position
+        int idxxx = bb->cfg->get_var_index(params[0]);
+        o << "    movl " << bb->cfg->IR_reg_to_asm(params[2]) << ", %eax\n";
+        o << "    movslq %eax, %rbx\n"; // Sign extend to 64-bit
+        o << "    leaq -" << (idxxx) << "(%rbp, %rbx, 4), %rax\n"; // Correct displacement and scaling
+        o << "    movl " << bb->cfg->IR_reg_to_asm(params[1]) << ", %edx\n";
+        o << "    movl %edx, (%rax)\n";
+        break;
+    }
+    case addTblx: 
+    {
+        // add: params[0] = destination, params[1] = expr, params[2] = position
+        int idxxx = bb->cfg->get_var_index(params[0]);
+        o << "    movl " << bb->cfg->IR_reg_to_asm(params[2]) << ", %eax\n"; 
+        o << "    movslq %eax, %rbx\n"; // Sign extend to 64-bit
+        o << "    leaq -" << (idxxx) << "(%rbp, %rbx, 4), %rax\n"; 
+        o << "    movl (%rax), %edx\n"; 
+        o << "    addl " << bb->cfg->IR_reg_to_asm(params[1]) << ", %edx\n"; //Ajoute la valeur 
+        o << "    movl %edx, (%rax)\n"; 
+        break;
+    }
+    case subTblx:
+    {
+        // sub: params[0] = destination, params[1] = expr, params[2] = position
+        int idxxx = bb->cfg->get_var_index(params[0]);
+        o << "    movl " << bb->cfg->IR_reg_to_asm(params[2]) << ", %eax\n"; 
+        o << "    movslq %eax, %rbx\n"; // Sign extend to 64-bit
+        o << "    leaq -" << (idxxx) << "(%rbp, %rbx, 4), %rax\n"; 
+        o << "    movl (%rax), %edx\n"; 
+        o << "    subl " << bb->cfg->IR_reg_to_asm(params[1]) << ", %edx\n"; //Sub la valeur 
+        o << "    movl %edx, (%rax)\n"; 
+        break;
+    }
+    case mulTblx:
+    {
+        // mul: params[0] = destination, params[1] = expr, params[2] = position
+        int idxxx = bb->cfg->get_var_index(params[0]);
+        o << "    movl " << bb->cfg->IR_reg_to_asm(params[2]) << ", %eax\n"; 
+        o << "    movslq %eax, %rbx\n"; // Sign extend to 64-bit
+        o << "    leaq -" << (idxxx) << "(%rbp, %rbx, 4), %rax\n"; 
+        o << "    movl (%rax), %edx\n"; 
+        o << "    imull " << bb->cfg->IR_reg_to_asm(params[1]) << ", %edx\n"; //Mul la valeur 
+        o << "    movl %edx, (%rax)\n"; 
+        break;
+    }
+    case divTblx:
+    {
+        // div: params[0] = destination, params[1] = expr, params[2] = position
+        int idxxx = bb->cfg->get_var_index(params[0]);
+        o << "    movl " << bb->cfg->IR_reg_to_asm(params[2]) << ", %eax\n"; 
+        o << "    movslq %eax, %rbx\n"; // Sign extend to 64-bit
+        o << "    leaq -" << (idxxx) << "(%rbp, %rbx, 4), %rcx\n"; 
+        o << "    movl (%rcx), %eax\n";
+        o << "    cltd\n";
+        o << "    idivl " << bb->cfg->IR_reg_to_asm(params[1]) << "\n"; //Div la valeur
+        o << "    movl %eax, (%rcx)\n";
+        break;
+    }
+    case modTblx:
+    {
+        // mod: params[0] = destination, params[1] = expr, params[2] = position
+        int idxxx = bb->cfg->get_var_index(params[0]);
+        o << "    movl " << bb->cfg->IR_reg_to_asm(params[2]) << ", %eax\n"; 
+        o << "    movslq %eax, %rbx\n"; // Sign extend to 64-bit
+        o << "    leaq -" << (idxxx) << "(%rbp, %rbx, 4), %rcx\n"; 
+        o << "    movl (%rcx), %eax\n";
+        o << "    cltd\n";
+        o << "    idivl " << bb->cfg->IR_reg_to_asm(params[1]) << "\n"; //Mod la valeur
+        o << "    movl %edx, (%rcx)\n";
+        break;
+    }
+    case getTblx:{
+        // copy: params[0] = destination, params[1] = tableaux, params[2] = position
+        int idxxx = bb->cfg->get_var_index(params[1]);
+        o << "    movl " << bb->cfg->IR_reg_to_asm(params[2]) << ", %eax\n";
+        o << "    movslq %eax, %rbx\n"; // Sign extend to 64-bit
+        o << "    leaq -" << (idxxx) << "(%rbp, %rbx, 4), %rax\n"; // Correct displacement and scaling
+        o << "    movl (%rax), %edx\n";
+        o << "    movl %edx, " << bb->cfg->IR_reg_to_asm(params[0]) << "\n";
+    break;}
     case incr:
         // incr: params[0] = var
         o << "    movl " << bb->cfg->IR_reg_to_asm(params[0]) << ", %eax\n";
@@ -340,9 +422,9 @@ void CFG::gen_asm_epilogue(std::ostream &o)
     o << "    ret\n";
 }
 
-void CFG::add_to_symbol_table(std::string name, Type t)
+void CFG::add_to_symbol_table(std::string name, Type t, int size)
 {
-    symbolTable.addSymbol(name);
+    symbolTable.addSymbol(name, size);
 }
 
 std::string CFG::create_new_tempvar(Type t)

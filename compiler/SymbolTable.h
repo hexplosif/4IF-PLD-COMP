@@ -9,7 +9,7 @@ public:
     SymbolTable();
 
     // Ajoute une variable à la table si elle n'existe pas encore
-    void addSymbol(const std::string &name);
+    void addSymbol(const std::string &name, int size = -1);
 
     // Renvoie l'index associé à une variable
     int getSymbolIndex(const std::string &name) const;

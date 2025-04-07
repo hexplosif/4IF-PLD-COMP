@@ -51,12 +51,20 @@ antlrcpp::Any CodeGenVisitor::visitDeclarationStatement(ifccParser::DeclarationS
     // et, si initialisée, on génère une instruction d'affectation.
     for (auto sub : decl->sub_decl()) {
         string varName = sub->VAR()->getText();
-        cfg->add_to_symbol_table(varName, t);
-        if(sub->expr()) {
-            // Évalue l'expression et récupère le nom de la variable temporaire contenant le résultat
-            string res = any_cast<string>(this->visit(sub->expr()));
-            cfg->current_bb->add_IRInstr(IRInstr::copy, t, {varName, res});
+        if (sub->CONST() != nullptr) { // C'est un tableaux
+            int size = std::stoi(sub->CONST()->getText());
+            cfg->add_to_symbol_table(varName, t, size); 
         }
+        else
+        {
+            cfg->add_to_symbol_table(varName, t);
+            if(sub->expr()) {
+                // Évalue l'expression et récupère le nom de la variable temporaire contenant le résultat
+                string res = any_cast<string>(this->visit(sub->expr()));
+                cfg->current_bb->add_IRInstr(IRInstr::copy, t, {varName, res});
+            }
+        }
+
     }
     return 0;
 }
@@ -68,31 +76,61 @@ antlrcpp::Any CodeGenVisitor::visitAssignmentStatement(ifccParser::AssignmentSta
     string varName = assign->VAR()->getText();
     // On suppose que la variable a déjà été déclarée
     string op = assign->op_assign()->getText();
-    if (op == "=") {
-        string exprResult = any_cast<string>(this->visit(assign->expr()));
-        cfg->current_bb->add_IRInstr(IRInstr::copy, Type::INT, {varName, exprResult});
+    size_t equalsPos = ctx->getText().find('=');
+    if (equalsPos != std::string::npos && ctx->getText().substr(0, equalsPos).find('[') != std::string::npos) {// C'est un tableau
+        string pos = any_cast<string>(this->visit(assign->expr(0)));
+        if (op == "=") {
+            string exprResult = any_cast<string>(this->visit(assign->expr(1)));
+            cfg->current_bb->add_IRInstr(IRInstr::copyTblx, Type::INT, {varName, exprResult, pos});
+        }
+        else if (op == "+=") {
+            string exprResult = any_cast<string>(this->visit(assign->expr(1)));
+            cfg->current_bb->add_IRInstr(IRInstr::addTblx, Type::INT, {varName, exprResult, pos});
+        }
+        else if (op == "-=") {
+            string exprResult = any_cast<string>(this->visit(assign->expr(1)));
+            cfg->current_bb->add_IRInstr(IRInstr::subTblx, Type::INT, {varName, exprResult, pos});
+        }
+        else if (op == "*=") {
+            string exprResult = any_cast<string>(this->visit(assign->expr(1)));
+            cfg->current_bb->add_IRInstr(IRInstr::mulTblx, Type::INT, {varName, exprResult, pos});
+        }
+        else if (op == "/=") {
+            string exprResult = any_cast<string>(this->visit(assign->expr(1)));
+            cfg->current_bb->add_IRInstr(IRInstr::divTblx, Type::INT, {varName, exprResult, pos});
+        }
+        else if (op == "%=") {
+            string exprResult = any_cast<string>(this->visit(assign->expr(1)));
+            cfg->current_bb->add_IRInstr(IRInstr::modTblx, Type::INT, {varName, exprResult, pos});
+        }
     }
-    else if (op == "+=") {
-        string exprResult = any_cast<string>(this->visit(assign->expr()));
-        cfg->current_bb->add_IRInstr(IRInstr::add, Type::INT, {varName, varName, exprResult});
+    else 
+    {
+        if (op == "=") {
+            string exprResult = any_cast<string>(this->visit(assign->expr(0)));
+            cfg->current_bb->add_IRInstr(IRInstr::copy, Type::INT, {varName, exprResult});
+        }
+        else if (op == "+=") {
+            string exprResult = any_cast<string>(this->visit(assign->expr(0)));
+            cfg->current_bb->add_IRInstr(IRInstr::add, Type::INT, {varName, varName, exprResult});
+        }
+        else if (op == "-=") {
+            string exprResult = any_cast<string>(this->visit(assign->expr(0)));
+            cfg->current_bb->add_IRInstr(IRInstr::sub, Type::INT, {varName, varName, exprResult});
+        }
+        else if (op == "*=") {
+            string exprResult = any_cast<string>(this->visit(assign->expr(0)));
+            cfg->current_bb->add_IRInstr(IRInstr::mul, Type::INT, {varName, varName, exprResult});
+        }
+        else if (op == "/=") {
+            string exprResult = any_cast<string>(this->visit(assign->expr(0)));
+            cfg->current_bb->add_IRInstr(IRInstr::div, Type::INT, {varName, varName, exprResult});
+        }
+        else if (op == "%=") {
+            string exprResult = any_cast<string>(this->visit(assign->expr(0)));
+            cfg->current_bb->add_IRInstr(IRInstr::mod, Type::INT, {varName, varName, exprResult});
+        }
     }
-    else if (op == "-=") {
-        string exprResult = any_cast<string>(this->visit(assign->expr()));
-        cfg->current_bb->add_IRInstr(IRInstr::sub, Type::INT, {varName, varName, exprResult});
-    }
-    else if (op == "*=") {
-        string exprResult = any_cast<string>(this->visit(assign->expr()));
-        cfg->current_bb->add_IRInstr(IRInstr::mul, Type::INT, {varName, varName, exprResult});
-    }
-    else if (op == "/=") {
-        string exprResult = any_cast<string>(this->visit(assign->expr()));
-        cfg->current_bb->add_IRInstr(IRInstr::div, Type::INT, {varName, varName, exprResult});
-    }
-    else if (op == "%=") {
-        string exprResult = any_cast<string>(this->visit(assign->expr()));
-        cfg->current_bb->add_IRInstr(IRInstr::mod, Type::INT, {varName, varName, exprResult});
-    }
-
     return 0;
 }
 
@@ -244,6 +282,16 @@ antlrcpp::Any CodeGenVisitor::visitPostDecrementExpression(ifccParser::PostDecre
     cfg->current_bb->add_IRInstr(IRInstr::decr, Type::INT, {varName});
     return 0;
 }
+
+
+antlrcpp::Any CodeGenVisitor::visitArrayAccessExpression(ifccParser::ArrayAccessExpressionContext *ctx)
+ {
+    std::string varName = ctx->VAR()->getText();
+    string pos = any_cast<string>(this->visit(ctx->expr()));
+    string temp = cfg->create_new_tempvar(Type::INT);
+    cfg->current_bb->add_IRInstr(IRInstr::getTblx, Type::INT, {temp, varName, pos});
+    return temp;
+ }
 
 
 antlrcpp::Any CodeGenVisitor::visitFunctionCallExpression(ifccParser::FunctionCallExpressionContext *ctx)
