@@ -21,7 +21,7 @@ class SymbolTable
     public:
         SymbolTable( int initialOffset );
 
-        Symbol addLocalVariable(std::string name, std::string type); //return offset
+        Symbol addLocalVariable(std::string name, std::string type, int size = 4, bool isArray = false); //return offset
         Symbol addGlobalVariable(std::string name, std::string type);
         std::string addTempVariable(std::string type); //return name
         std::string addTempConstVariable(std::string type, int value); //return name

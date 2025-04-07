@@ -11,18 +11,19 @@ stmt
     | assign_stmt            # AssignmentStatement
     | expr ';'               # ExpressionStatement
     | return_stmt            # ReturnStatement
-    | block                  # BlockStatement
     | if_stmt                # IfStatement
+    | block                  # BlockStatement
     | while_stmt             # WhileStatement
     ;
 
 
 decl_stmt : type sub_decl (',' sub_decl)* ';' ;     // Déclaration avec ou sans affectation
-sub_decl : VAR ('=' expr)? ;                        // Sub-règle pour les déclarations
-assign_stmt : VAR '=' expr ';' ;                    // Affectation
+sub_decl: VAR ('=' expr)? | VAR '[' CONST ']';      // Déclaration de tableau
+assign_stmt: (VAR | VAR '[' expr ']') op_assign expr ';'; // Affectation
 return_stmt : 'return' expr ';' ;                   // On retourne une expression
 if_stmt : 'if' '(' expr ')' stmt ('else' stmt)? ;   // If statement
 while_stmt : 'while' '(' expr ')' stmt ;            // While statement
+op_assign: '=' | '+=' | '-=' | '*=' | '/=' | '%=';
 
 expr
     : op=('-'|'!') expr                             # UnaryExpression
@@ -34,6 +35,7 @@ expr
     | '(' expr ')'                                  # ParenthesisExpression
     | VAR '(' (expr (',' expr)*)? ')'               # FunctionCallExpression
     | VAR                                           # VariableExpression
+    | VAR '[' expr ']'		                        # ArrayAccessExpression
     | CONST                                         # ConstantExpression
     | CONST_CHAR                                    # ConstantCharExpression
     ;
