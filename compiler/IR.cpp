@@ -181,8 +181,7 @@ void IRInstr::gen_asm(std::ostream &o)
 
 BasicBlock::BasicBlock(CFG *cfg, std::string entry_label)
     : cfg(cfg), label(entry_label), exit_true(nullptr), exit_false(nullptr)
-{
-}
+{}
 
 void BasicBlock::add_IRInstr(IRInstr::Operation op, VarType t, std::vector<std::string> params)
 {
@@ -207,7 +206,7 @@ void BasicBlock::gen_asm(std::ostream &o)
     if (!test_var_name.empty() && exit_true != nullptr && exit_false != nullptr)
     {
         // Conditional jump based on test_var_name
-        o << "    movl " << cfg->IR_reg_to_asm(test_var_name) << ", %eax\n";
+        o << "    movl " << test_var_register << ", %eax\n";
         o << "    cmpl $0, %eax\n";
         o << "    je " << exit_false->label << "\n";
         o << "    jmp " << exit_true->label << "\n";
@@ -215,7 +214,10 @@ void BasicBlock::gen_asm(std::ostream &o)
     else if (exit_true != nullptr)
     {
         // Unconditional jump to exit_true
-        o << "    jmp " << exit_true->label << "\n";
+        if (exit_true->label != ".Lepilogue") { // Already have jmp to end with return statement
+            o << "    jmp " << exit_true->label << "\n";
+        }
+        
     } else { // si on est à la fin de cfg (fin de function)
         cfg->gen_asm_epilogue(o);
     }
@@ -234,11 +236,6 @@ CFG::CFG(DefFonction *ast) : ast(ast), nextFreeSymbolIndex(0), nextBBnumber(0), 
 void CFG::add_bb(BasicBlock *bb)
 {
     bbs.push_back(bb);
-    if (current_bb != nullptr)
-    {
-        current_bb->exit_true = bb;
-    }
-    current_bb = bb;
 }
 
 void CFG::gen_asm(std::ostream &o)
@@ -246,17 +243,16 @@ void CFG::gen_asm(std::ostream &o)
     o << ".global main\n";
     for (size_t i = 0; i < bbs.size(); i++)
     {
-        o << bbs[i]->label << ":\n"; // Emit label for every block
+        o << bbs[i]->label << ":\n";
         if (i == 0)
         {
             gen_asm_prologue(o);
+            o << "    jmp " <<  bbs[i]->exit_true->label << "\n";
         } else {
-            o << bbs[i]->label << ":\n";
+            bbs[i]->gen_asm(o);
         }
-        bbs[i]->gen_asm(o);
     }
-    o << ".Lepilogue:\n";
-    gen_asm_epilogue(o);
+
 }
 
 std::string CFG::IR_reg_to_asm(std::string& reg)

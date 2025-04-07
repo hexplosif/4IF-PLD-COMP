@@ -75,6 +75,7 @@ public:
     std::vector<IRInstr*> instrs; /** < the instructions themselves. */
     std::string test_var_name;  /**< when generating IR code for an if(expr) or while(expr) etc,
                                      store here the name of the variable that holds the value of expr */
+    std::string test_var_register;  /**< type of the variable that holds the value of expr */
 };
 
 

@@ -11,8 +11,8 @@ stmt
     | assign_stmt            # AssignmentStatement
     | expr ';'               # ExpressionStatement
     | return_stmt            # ReturnStatement
-    | block                  # BlockStatement
     | if_stmt                # IfStatement
+    | block                  # BlockStatement
     | while_stmt             # WhileStatement
     ;
 

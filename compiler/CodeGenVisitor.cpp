@@ -25,12 +25,22 @@ antlrcpp::Any CodeGenVisitor::visitProg(ifccParser::ProgContext *ctx)
     }
 
     // Création du CFG pour main (l'AST de la fonction est ici nullptr pour simplifier)
+    // TODO: if this block is a function block, we need to create a new cfg and scope for the function
     cfg = new CFG(nullptr);
+    cfg->currentScope = new SymbolTable(0);
+    cfg->currentScope->setParent(gvm->getGlobalScope());
+
+    BasicBlock* bbStart = new BasicBlock(cfg, cfg->new_BB_name());
+    cfg->add_bb(bbStart);
+    cfg->current_bb->exit_true = bbStart;
+    cfg->current_bb = bbStart;
 
     // On traite ici le bloc principal
     this->visit(ctx->block());
-    
-    // Pour le return, la génération IR a lieu dans visitReturn_stmt.
+
+    BasicBlock* bbEnd = new BasicBlock(cfg, ".Lepilogue");
+    cfg->add_bb(bbEnd);
+    cfg->current_bb->exit_true = bbEnd;
     
     // Une fois le CFG construit, on génère le code assembleur.
     gvm->gen_asm(std::cout);
@@ -40,37 +50,12 @@ antlrcpp::Any CodeGenVisitor::visitProg(ifccParser::ProgContext *ctx)
 
 antlrcpp::Any CodeGenVisitor::visitBlock(ifccParser::BlockContext *ctx)
 {
-    bool isThisFunctionBlock = (cfg->currentScope == nullptr);
-
-    // TODO: if this block is a function block, we need to create a new cfg for the function
-
-    // Creer un nouveau scope quand on entre un nouveau block
-    SymbolTable *parentScope = isThisFunctionBlock ? gvm->getGlobalScope() : cfg->currentScope;
-    cfg->currentScope = new SymbolTable(parentScope->getCurrentDeclOffset());
-    cfg->currentScope->setParent(parentScope);
-
-    // Créer un nouveau basic block
-    string blockName = cfg->new_BB_name();
-    BasicBlock* bb = new BasicBlock(cfg, blockName);
-    cfg->add_bb(bb);
-
     // Visiter les statements
     for (auto stmt : ctx->stmt()) {
-        if (cfg->current_bb == nullptr)
-            break; // Un return a été rencontré : on arrête le traitement du bloc.
+        // if (cfg->current_bb == nullptr)
+        //     break; // Un return a été rencontré : on arrête le traitement du bloc.
         this->visit(stmt);
     }
-
-    // le block est finis, on synchronize le parent et ce scope; on revient vers scope de parent
-    cfg->currentScope->getParent()->synchronize(cfg->currentScope);
-    cfg->currentScope = cfg->currentScope->getParent();
-
-    if (isThisFunctionBlock) { // si ce bloc est une fonction
-        // Ajouter un bloc de fin pour la fonction
-        BasicBlock* bbEnd = new BasicBlock(cfg, ".Lepilogue");
-        cfg->add_bb(bbEnd);
-    }
-
     return 0;
 }
 
@@ -133,8 +118,6 @@ antlrcpp::Any CodeGenVisitor::visitReturn_stmt(ifccParser::Return_stmtContext *c
     cfg->current_bb->add_IRInstr(IRInstr::copy, VarType::INT, {"%eax", exprResult});
     // Ajoute un saut vers l'épilogue
     cfg->current_bb->add_IRInstr(IRInstr::jmp, VarType::INT, {".Lepilogue"});
-    // Marquer le bloc courant comme terminé en le vidant (ou en le désactivant)
-    cfg->current_bb = nullptr; // On n'ajoutera plus d'instructions dans ce bloc.
     return exprResult;
 }
 
@@ -319,11 +302,14 @@ antlrcpp::Any CodeGenVisitor::visitFunctionCallExpression(ifccParser::FunctionCa
     return temp;
 }
 
-antlrcpp::Any CodeGenVisitor::visitIfStatement(ifccParser::IfStatementContext *ctx)
+antlrcpp::Any CodeGenVisitor::visitIf_stmt(ifccParser::If_stmtContext *ctx)
 {
-    auto if_stmt = ctx->if_stmt();
+    bool hasElseStmt = ctx->stmt().size() > 1;
+
     // Évalue la condition
-    std::string cond = any_cast<std::string>(this->visit(if_stmt->expr()));
+    std::string cond = any_cast<std::string>(visit(ctx->expr()));
+
+    BasicBlock* tmp = cfg->current_bb->exit_true;
     // Crée un nouveau bloc pour la suite (join)
     std::string joinLabel = cfg->new_BB_name();
     BasicBlock *join_bb = new BasicBlock(cfg, joinLabel);
@@ -334,39 +320,35 @@ antlrcpp::Any CodeGenVisitor::visitIfStatement(ifccParser::IfStatementContext *c
     BasicBlock *then_bb = new BasicBlock(cfg, thenLabel);
     cfg->add_bb(then_bb);
 
+    // Crée le bloc pour la branche "else"
+    BasicBlock *else_bb = join_bb;
+    if (hasElseStmt) {
+        std::string elseLabel = cfg->new_BB_name();
+        else_bb = new BasicBlock(cfg, elseLabel);
+        cfg->add_bb(else_bb);
+        else_bb->exit_true = join_bb;
+    }
+    
+    // Connecter les blocs
+    join_bb->exit_true = tmp;
+    then_bb->exit_true = join_bb;
+    cfg->current_bb->exit_true = then_bb;
+    cfg->current_bb->exit_false = else_bb;
+
     // Configure le bloc courant pour effectuer un saut conditionnel
     cfg->current_bb->test_var_name = cond;
+    cfg->current_bb->test_var_register = cfg->IR_reg_to_asm(cond);
+
+    // Génère la branche "then"
+    cfg->current_bb = then_bb;
+    this->visit(ctx->stmt(0));
+    // then_bb->add_IRInstr(IRInstr::jmp, VarType::INT, {joinLabel});
     
-    // Vérifie s'il y a un else : si if_stmt->stmt() contient 2 instructions, la seconde est le else
-    if (if_stmt->stmt().size() > 1)
-    {
-        std::string elseLabel = cfg->new_BB_name();
-        BasicBlock *else_bb = new BasicBlock(cfg, elseLabel);
-        cfg->add_bb(else_bb);
-
-        cfg->current_bb->exit_true = then_bb;
-        cfg->current_bb->exit_false = else_bb;
-
-        // Génère la branche "then"
-        cfg->current_bb = then_bb;
-        this->visit(if_stmt->stmt(0));
-        then_bb->add_IRInstr(IRInstr::jmp, VarType::INT, {joinLabel});
-
-        // Génère la branche "else"
+    // Génère la branche "else"
+    if (hasElseStmt){
         cfg->current_bb = else_bb;
-        this->visit(if_stmt->stmt(1));
-        else_bb->add_IRInstr(IRInstr::jmp, VarType::INT, {joinLabel});
-    }
-    else
-    {
-        // Pas de else : la branche fausse saute directement à join_bb
-        cfg->current_bb->exit_true = then_bb;
-        cfg->current_bb->exit_false = join_bb;
-
-        // Génère la branche "then"
-        cfg->current_bb = then_bb;
-        this->visit(if_stmt->stmt(0));
-        then_bb->add_IRInstr(IRInstr::jmp, VarType::INT, {joinLabel});
+        this->visit(ctx->stmt(1));
+        // else_bb->add_IRInstr(IRInstr::jmp, VarType::INT, {joinLabel});
     }
 
     // La suite du code se trouve dans join_bb
@@ -374,42 +356,64 @@ antlrcpp::Any CodeGenVisitor::visitIfStatement(ifccParser::IfStatementContext *c
     return 0;
 }
 
-antlrcpp::Any CodeGenVisitor::visitWhileStatement(ifccParser::WhileStatementContext *ctx)
+antlrcpp::Any CodeGenVisitor::visitWhile_stmt(ifccParser::While_stmtContext *ctx)
 {
-    auto while_stmt = ctx->while_stmt();
     // Crée un bloc pour évaluer la condition
     std::string condLabel = cfg->new_BB_name();
-    BasicBlock *cond_bb = new BasicBlock(cfg, condLabel);
+    BasicBlock *cond_bb = new BasicBlock(cfg, "cond" + condLabel);
     cfg->add_bb(cond_bb);
-    // Ajoute un saut du bloc courant vers le bloc de condition
-    cfg->current_bb->add_IRInstr(IRInstr::jmp, VarType::INT, {condLabel});
+    cfg->current_bb->exit_true = cond_bb;
+    // cfg->current_bb->add_IRInstr(IRInstr::jmp, VarType::INT, {condLabel}); // Ajoute un saut du bloc courant vers le bloc de condition
 
     // Génère le bloc de condition
     cfg->current_bb = cond_bb;
-    std::string cond = any_cast<std::string>(this->visit(while_stmt->expr()));
+    std::string cond = any_cast<std::string>(this->visit(ctx->expr()));
     cond_bb->test_var_name = cond;
+    cond_bb->test_var_register = cfg->IR_reg_to_asm(cond);
 
     // Crée le bloc du corps de la boucle
     std::string bodyLabel = cfg->new_BB_name();
-    BasicBlock *body_bb = new BasicBlock(cfg, bodyLabel);
+    BasicBlock *body_bb = new BasicBlock(cfg, "body" + bodyLabel);
     cfg->add_bb(body_bb);
 
     // Crée le bloc de sortie (après la boucle)
     std::string joinLabel = cfg->new_BB_name();
-    BasicBlock *join_bb = new BasicBlock(cfg, joinLabel);
+    BasicBlock *join_bb = new BasicBlock(cfg, "join" + joinLabel);
     cfg->add_bb(join_bb);
 
     // La condition détermine le chemin
     cond_bb->exit_true = body_bb;
     cond_bb->exit_false = join_bb;
+    body_bb->exit_true = cond_bb;
 
     // Génère le corps de la boucle
     cfg->current_bb = body_bb;
-    this->visit(while_stmt->stmt());
-    // À la fin du corps, retourne vers la condition
-    body_bb->add_IRInstr(IRInstr::jmp, VarType::INT, {condLabel});
+    this->visit(ctx->stmt());
 
     // La suite du code se trouve dans join_bb
     cfg->current_bb = join_bb;
     return 0;
+}
+
+antlrcpp::Any CodeGenVisitor::visitBlockStatement(ifccParser::BlockStatementContext *ctx) {
+    enterNewScope();
+    visit(ctx->block());
+    exitCurrentScope();
+    return 0;
+}
+
+// =======================================================
+//                      OTHERS
+// =======================================================
+void CodeGenVisitor::enterNewScope() {
+    // Creer un nouveau scope quand on entre un nouveau block
+    SymbolTable *parentScope = cfg->currentScope;
+    cfg->currentScope = new SymbolTable(parentScope->getCurrentDeclOffset());
+    cfg->currentScope->setParent(parentScope);
+}
+
+void CodeGenVisitor::exitCurrentScope() {
+    // le block est finis, on synchronize le parent et ce scope; on revient vers scope de parent
+    cfg->currentScope->getParent()->synchronize(cfg->currentScope);
+    cfg->currentScope = cfg->currentScope->getParent();
 }
