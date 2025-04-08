@@ -35,19 +35,36 @@ Symbol SymbolTable::addGlobalVariable(std::string name, std::string type) {
 }
 
 std::string SymbolTable::addTempVariable(std::string type) {
+    currentDeclOffset += 4;
     std::string name = "!tmp" + std::to_string(currentDeclOffset);
     Symbol p = { getType(type) , currentDeclOffset, ScopeType::BLOCK };
     table[name] = p;
-    currentDeclOffset += 4;
     return name;
 }
 
 std::string SymbolTable::addTempConstVariable(std::string type, int value) {
+    currentDeclOffset += 4;
     std::string name = "!tmp" + std::to_string(currentDeclOffset);
     Symbol p = { getType(type) , currentDeclOffset, ScopeType::BLOCK, value };
     table[name] = p;
-    currentDeclOffset += 4;
     return name;
+}
+
+void SymbolTable::freeLastTempVariable() {
+    if (currentDeclOffset > 0) {
+        std::string name = "!tmp" + std::to_string(currentDeclOffset);
+        currentDeclOffset -= 4;
+
+        if (table.find(name) == table.end()) {
+            std::cerr << "error: temp variable '" << name << "' not found\n";
+            exit(1);
+        }
+        table.erase(name);
+    }
+    else {
+        std::cerr << "error: no temp variable to free\n";
+        exit(1);
+    }
 }
 
 Symbol* SymbolTable::findVariable(std::string name) {

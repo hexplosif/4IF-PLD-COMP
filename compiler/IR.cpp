@@ -21,7 +21,7 @@ void IRInstr::gen_asm(std::ostream &o)
     {
     case ldconst:
         // ldconst: params[0] = destination, params[1] = constante
-        o << "    movl $" << params[1] << ", " << params[0] << "\n";
+        o << "    movl " << params[1] << ", " << params[0] << "\n";
         break;
     case copy:
         // copy: params[0] = destination, params[1] = source
@@ -317,11 +317,13 @@ BasicBlock::BasicBlock(CFG *cfg, std::string entry_label)
 
 void BasicBlock::add_IRInstr(IRInstr::Operation op, VarType t, std::vector<std::string> params)
 {
+    // General case
     bool needFindAdd = (op == IRInstr::Operation::call || op == IRInstr::Operation::jmp);
     std::string p0 = needFindAdd ? params[0] : cfg->IR_reg_to_asm(params[0]);
     std::string p1 = params.size() >= 2 ? cfg->IR_reg_to_asm(params[1]) : "";
     std::string p2 = params.size() >= 3 ? cfg->IR_reg_to_asm(params[2]) : "";
 
+    // Tableau case
     if (op == IRInstr::Operation::copyTblx || op == IRInstr::Operation::addTblx || op == IRInstr::Operation::subTblx ||
         op == IRInstr::Operation::mulTblx || op == IRInstr::Operation::divTblx || op == IRInstr::Operation::modTblx)
     {
@@ -337,6 +339,10 @@ void BasicBlock::add_IRInstr(IRInstr::Operation op, VarType t, std::vector<std::
     }
 
     std::vector<std::string> paramsRealAddr = {p0, p1, p2};
+
+    if (op == IRInstr::Operation::copy && p1[0] == '$') {
+        op = IRInstr::Operation::ldconst;
+    }
 
     IRInstr *instr = new IRInstr(this, op, t, paramsRealAddr);
     instrs.push_back(instr);
@@ -404,12 +410,16 @@ void CFG::gen_asm(std::ostream &o)
     }
 }
 
-std::string CFG::IR_reg_to_asm(std::string &reg)
+std::string CFG::IR_reg_to_asm(std::string &reg, bool ignoreCst)
 {
     // Utilise la table des symboles pour obtenir l'index et calcule l'offset mémoire.
     Symbol *p = currentScope->findVariable(reg);
     if (p != nullptr)
     {
+        if (p->isConstant() & !ignoreCst) {
+            return "$" + std::to_string(p->getCstValue());
+        }
+
         if (p->scopeType == GLOBAL)
         {
             return reg + "(%rip)";

@@ -29,6 +29,15 @@ class Symbol
             return value; 
         }
 
+        void info() {
+            std::cout << "Symbol: type=" << (type == INT ? "int" : "char") 
+                      << ", offset=" << offset 
+                      << ", scopeType=" << (scopeType == GLOBAL ? "global" : (scopeType == FUNCTION_PARAMS ? "function_params" : "block")) 
+                      << ", isCst=" << isCst 
+                      << ", value=" << value 
+                      << std::endl;
+        }
+
         VarType type;
         int offset;
         ScopeType scopeType;

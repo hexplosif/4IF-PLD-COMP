@@ -18,6 +18,8 @@ class SymbolTable
         std::string addTempVariable(std::string type); //return name
         std::string addTempConstVariable(std::string type, int value); //return name
 
+        void freeLastTempVariable(); // free last temp variable
+
 
         Symbol* findVariable(std::string name); // find all var can see in the scope
         Symbol* findVariableThisScope(std::string name); //find only var in the scope
@@ -33,6 +35,16 @@ class SymbolTable
 
         void printTable();
         static bool isTempVariable(std::string name);
+
+        void infoVariable(std::string name) {
+            Symbol* var = findVariable(name);
+            if (var != nullptr) {
+                std::cout << "Variable: " << name;
+                var->info();
+            } else {
+                std::cout << "Variable not found: " << name << std::endl;
+            }
+        }
 
     private:
         std::map<std::string, Symbol> table;

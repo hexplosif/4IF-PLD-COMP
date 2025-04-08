@@ -1,5 +1,7 @@
 #pragma once
 
+#define NOT_CONST_OPTI "$__not_constant__"
+
 #include "antlr4-runtime.h"
 #include "generated/ifccBaseVisitor.h"
 #include "IR.h"
@@ -7,6 +9,15 @@
 class CodeGenVisitor : public ifccBaseVisitor {
 private:
     GVM* gvm; // Global Variable Manager
+    
+    Symbol* findVariable(std::string varName);
+    std::string addTempConstVariable(std::string type, int value);
+    void freeLastTempVariable(int inbVar);
+
+    std::string constantOptimizeBinaryOp(std::string &left, std::string &right, IRInstr::Operation op);
+    std::string constantOptimizeUnaryOp(std::string &left, IRInstr::Operation op);
+    int getConstantResultBinaryOp(int leftValue, int rightValue, IRInstr::Operation op);
+    int getConstantResultUnaryOp(int leftValue, IRInstr::Operation op);
 
     void enterNewScope();
     void exitCurrentScope();
