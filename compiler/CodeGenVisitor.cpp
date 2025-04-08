@@ -89,10 +89,20 @@ antlrcpp::Any CodeGenVisitor::visitSub_declWithType(ifccParser::Sub_declContext 
     }
     else
     {
-        if (ctx->CONST() != nullptr)
-        { // C'est un tableau
-            int size = std::stoi(ctx->CONST()->getText());
-            cfg->currentScope->addLocalVariable(varName, varType, size);
+        if (ctx->CONST(0) != nullptr) { // C'est un tableaux
+            int size = std::stoi(ctx->CONST(0)->getText());
+            cfg->currentScope->addLocalVariable(varName, varType, size); 
+            int i = 1;
+            while(ctx->CONST(i)) {
+                string pos = std::to_string(i-1); 
+                string tempPos = cfg->currentScope->addTempVariable("int");
+                cfg->current_bb->add_IRInstr(IRInstr::ldconst, VarType::INT, {tempPos, pos});
+                string value = ctx->CONST(i)->getText();  
+                string tempValue = cfg->currentScope->addTempVariable("int");
+                cfg->current_bb->add_IRInstr(IRInstr::ldconst, VarType::INT, {tempValue, value});
+                cfg->current_bb->add_IRInstr(IRInstr::copyTblx, VarType::INT, {varName, tempValue, tempPos});
+                i++;
+            }
         }
         else
         {
