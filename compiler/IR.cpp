@@ -292,11 +292,9 @@ void IRInstr::gen_asm(std::ostream &o)
         break;
 
     case call:
+        // call: params[0] = label, params[1] = destination, params[2]... = paramètres
         o << "    call " << params[0] << "\n";
-        if (params.size() >= 2)
-        {
-            o << "    movl %eax, " << params[1] << "\n";
-        }
+        o << "    movl %eax, " << params[1] << "\n";
         break;
 
     case jmp:
