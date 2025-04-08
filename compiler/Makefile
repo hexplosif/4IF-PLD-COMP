@@ -20,7 +20,10 @@ OBJECTS = build/ifccBaseVisitor.o \
           build/main.o \
           build/CodeGenVisitor.o \
           build/SymbolTable.o \
-          build/IR.o
+          build/IR.o \
+		  build/gen_asm_arm.o \
+		  build/gen_asm_msp430.o \
+		  build/gen_asm_x86.o \
 
 ifcc: $(OBJECTS)
 	@mkdir -p build

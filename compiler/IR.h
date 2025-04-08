@@ -121,6 +121,8 @@ public:
     SymbolTable* currentScope = nullptr; /**< the symbol table of the current scope */
     int getStackSize();
 
+    static bool isRegConstant(std::string& reg);
+
 protected:
     static int nextBBnumber; /**< just for naming */
     std::vector<BasicBlock*> bbs; /**< all the basic blocks of this CFG*/
