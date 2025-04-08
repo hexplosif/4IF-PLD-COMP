@@ -17,7 +17,6 @@ void IRInstr::gen_asm(std::ostream &o)
     static int labelCounter = 0;
     // Pour simplifier, on gère ici ldconst, copy, add, sub et mul.
 
-
     switch (op)
     {
     case ldconst:
@@ -45,94 +44,89 @@ void IRInstr::gen_asm(std::ostream &o)
         o << "    imull " << params[2] << ", %eax\n";
         o << "    movl %eax, " << params[0] << "\n";
         break;
-    case div:    // params : dest, source1, source2
+    case div: // params : dest, source1, source2
         o << "    movl " << params[1] << ", %eax\n";
         o << "    cltd\n";
         o << "    idivl " << params[2] << "\n";
         o << "    movl %eax, " << params[0] << "\n";
         break;
-    case mod:    // params : dest, source1, source2
+    case mod: // params : dest, source1, source2
         o << "    movl " << params[1] << ", %eax\n";
         o << "    cltd\n";
         o << "    idivl " << params[2] << "\n";
         o << "    movl %edx, " << params[0] << "\n";
-        break;  
+        break;
 
-    case copyTblx:
-    {
+    case copyTblx: {
         // copy: params[0] = destination, params[1] = expr, params[2] = position
         o << "    movl " << params[2] << ", %eax\n";
-        o << "    movslq %eax, %rbx\n"; // Sign extend to 64-bit
+        o << "    movslq %eax, %rbx\n";                                // Sign extend to 64-bit
         o << "    leaq -" << (params[0]) << "(%rbp, %rbx, 4), %rax\n"; // Correct displacement and scaling
         o << "    movl " << params[1] << ", %edx\n";
         o << "    movl %edx, (%rax)\n";
         break;
     }
-    case addTblx: 
-    {
+    case addTblx: {
         // add: params[0] = destination, params[1] = expr, params[2] = position
-        o << "    movl " << params[2] << ", %eax\n"; 
+        o << "    movl " << params[2] << ", %eax\n";
         o << "    movslq %eax, %rbx\n"; // Sign extend to 64-bit
-        o << "    leaq -" << (params[0]) << "(%rbp, %rbx, 4), %rax\n"; 
-        o << "    movl (%rax), %edx\n"; 
-        o << "    addl " << params[1] << ", %edx\n"; //Ajoute la valeur 
-        o << "    movl %edx, (%rax)\n"; 
+        o << "    leaq -" << (params[0]) << "(%rbp, %rbx, 4), %rax\n";
+        o << "    movl (%rax), %edx\n";
+        o << "    addl " << params[1] << ", %edx\n"; // Ajoute la valeur
+        o << "    movl %edx, (%rax)\n";
         break;
     }
-    case subTblx:
-    {
+    case subTblx: {
         // sub: params[0] = destination, params[1] = expr, params[2] = position
-        o << "    movl " << params[2] << ", %eax\n"; 
+        o << "    movl " << params[2] << ", %eax\n";
         o << "    movslq %eax, %rbx\n"; // Sign extend to 64-bit
-        o << "    leaq -" << (params[0]) << "(%rbp, %rbx, 4), %rax\n"; 
-        o << "    movl (%rax), %edx\n"; 
-        o << "    subl " << params[1] << ", %edx\n"; //Sub la valeur 
-        o << "    movl %edx, (%rax)\n"; 
+        o << "    leaq -" << (params[0]) << "(%rbp, %rbx, 4), %rax\n";
+        o << "    movl (%rax), %edx\n";
+        o << "    subl " << params[1] << ", %edx\n"; // Sub la valeur
+        o << "    movl %edx, (%rax)\n";
         break;
     }
-    case mulTblx:
-    {
+    case mulTblx: {
         // mul: params[0] = destination, params[1] = expr, params[2] = position
-        o << "    movl " << params[2] << ", %eax\n"; 
+        o << "    movl " << params[2] << ", %eax\n";
         o << "    movslq %eax, %rbx\n"; // Sign extend to 64-bit
-        o << "    leaq -" << params[0] << "(%rbp, %rbx, 4), %rax\n"; 
-        o << "    movl (%rax), %edx\n"; 
-        o << "    imull " << params[1] << ", %edx\n"; //Mul la valeur 
-        o << "    movl %edx, (%rax)\n"; 
+        o << "    leaq -" << params[0] << "(%rbp, %rbx, 4), %rax\n";
+        o << "    movl (%rax), %edx\n";
+        o << "    imull " << params[1] << ", %edx\n"; // Mul la valeur
+        o << "    movl %edx, (%rax)\n";
         break;
     }
-    case divTblx:
-    {
+    case divTblx: {
         // div: params[0] = destination, params[1] = expr, params[2] = position
-        o << "    movl " << params[2] << ", %eax\n"; 
+        o << "    movl " << params[2] << ", %eax\n";
         o << "    movslq %eax, %rbx\n"; // Sign extend to 64-bit
-        o << "    leaq -" << params[0] << "(%rbp, %rbx, 4), %rcx\n"; 
+        o << "    leaq -" << params[0] << "(%rbp, %rbx, 4), %rcx\n";
         o << "    movl (%rcx), %eax\n";
         o << "    cltd\n";
-        o << "    idivl " << params[1] << "\n"; //Div la valeur
+        o << "    idivl " << params[1] << "\n"; // Div la valeur
         o << "    movl %eax, (%rcx)\n";
         break;
     }
-    case modTblx:
-    {
+    case modTblx: {
         // mod: params[0] = destination, params[1] = expr, params[2] = position
-        o << "    movl " << params[2] << ", %eax\n"; 
+        o << "    movl " << params[2] << ", %eax\n";
         o << "    movslq %eax, %rbx\n"; // Sign extend to 64-bit
-        o << "    leaq -" << params[0] << "(%rbp, %rbx, 4), %rcx\n"; 
+        o << "    leaq -" << params[0] << "(%rbp, %rbx, 4), %rcx\n";
         o << "    movl (%rcx), %eax\n";
         o << "    cltd\n";
-        o << "    idivl " << params[1] << "\n"; //Mod la valeur
+        o << "    idivl " << params[1] << "\n"; // Mod la valeur
         o << "    movl %edx, (%rcx)\n";
         break;
     }
-    case getTblx:{
+    case getTblx: {
         // copy: params[0] = destination, params[1] = tableaux, params[2] = position
         o << "    movl " << params[2] << ", %eax\n";
-        o << "    movslq %eax, %rbx\n"; // Sign extend to 64-bit
+        o << "    movslq %eax, %rbx\n";                                // Sign extend to 64-bit
         o << "    leaq -" << (params[1]) << "(%rbp, %rbx, 4), %rax\n"; // Correct displacement and scaling
         o << "    movl (%rax), %edx\n";
         o << "    movl %edx, " << params[0] << "\n";
-    break;}
+        break;
+    }
     case incr:
         // incr: params[0] = var
         o << "    movl " << params[0] << ", %eax\n";
@@ -236,8 +230,7 @@ void IRInstr::gen_asm(std::ostream &o)
         o << "    movl %eax, " << params[0] << "\n";
         break;
 
-    case log_and:
-    {
+    case log_and: {
         int currentLabel = labelCounter++;
         std::string labelFalse = ".Lfalse" + std::to_string(currentLabel);
         std::string labelEnd = ".Lend" + std::to_string(currentLabel);
@@ -260,31 +253,30 @@ void IRInstr::gen_asm(std::ostream &o)
         o << "    movl %eax, " << params[0] << "\n";
         break;
     }
-    case log_or:
-    {
+    case log_or: {
         int currentLabel = labelCounter++;
         std::string labelTrue = ".Ltrue" + std::to_string(currentLabel);
         std::string labelEnd = ".Lend" + std::to_string(currentLabel);
-    
+
         o << "    movl " << params[1] << ", %eax\n";
         o << "    testl %eax, %eax\n";
         o << "    jnz " << labelTrue << "\n";
-    
+
         o << "    movl " << params[2] << ", %eax\n";
         o << "    testl %eax, %eax\n";
         o << "    jnz " << labelTrue << "\n";
-    
+
         o << "    movl $0, %eax\n";
         o << "    jmp " << labelEnd << "\n";
-    
+
         o << labelTrue << ":\n";
         o << "    movl $1, %eax\n";
-    
+
         o << labelEnd << ":\n";
         o << "    movl %eax, " << params[0] << "\n";
         break;
     }
-     
+
     case rmem:
         // rmem: params[0] = destination, params[1] = adresse
         o << "    movl " << params[1] << ", %eax\n";
@@ -300,9 +292,11 @@ void IRInstr::gen_asm(std::ostream &o)
         break;
 
     case call:
-        // call: params[0] = label, params[1] = destination, params[2]... = paramètres
         o << "    call " << params[0] << "\n";
-        o << "    movl %eax, " << params[1] << "\n";
+        if (params.size() >= 2)
+        {
+            o << "    movl %eax, " << params[1] << "\n";
+        }
         break;
 
     case jmp:
@@ -320,7 +314,8 @@ void IRInstr::gen_asm(std::ostream &o)
 
 BasicBlock::BasicBlock(CFG *cfg, std::string entry_label)
     : cfg(cfg), label(entry_label), exit_true(nullptr), exit_false(nullptr)
-{}
+{
+}
 
 void BasicBlock::add_IRInstr(IRInstr::Operation op, VarType t, std::vector<std::string> params)
 {
@@ -329,19 +324,17 @@ void BasicBlock::add_IRInstr(IRInstr::Operation op, VarType t, std::vector<std::
     std::string p1 = params.size() >= 2 ? cfg->IR_reg_to_asm(params[1]) : "";
     std::string p2 = params.size() >= 3 ? cfg->IR_reg_to_asm(params[2]) : "";
 
-    if (op == IRInstr::Operation::copyTblx 
-        || op == IRInstr::Operation::addTblx 
-        || op == IRInstr::Operation::subTblx
-        || op == IRInstr::Operation::mulTblx 
-        || op == IRInstr::Operation::divTblx 
-        || op == IRInstr::Operation::modTblx) {
-            Symbol* p = cfg->currentScope->findVariable(params[0]);
-            // p0 = "-" + to_string(p->offset) + "(%rbp, %rbx, 4)";
-            p0 = to_string(p->offset);
-        }
+    if (op == IRInstr::Operation::copyTblx || op == IRInstr::Operation::addTblx || op == IRInstr::Operation::subTblx ||
+        op == IRInstr::Operation::mulTblx || op == IRInstr::Operation::divTblx || op == IRInstr::Operation::modTblx)
+    {
+        Symbol *p = cfg->currentScope->findVariable(params[0]);
+        // p0 = "-" + to_string(p->offset) + "(%rbp, %rbx, 4)";
+        p0 = to_string(p->offset);
+    }
 
-    if (op == IRInstr::Operation::getTblx ) {
-        Symbol* p = cfg->currentScope->findVariable(params[1]);
+    if (op == IRInstr::Operation::getTblx)
+    {
+        Symbol *p = cfg->currentScope->findVariable(params[1]);
         p1 = to_string(p->offset);
     }
 
@@ -369,11 +362,13 @@ void BasicBlock::gen_asm(std::ostream &o)
     else if (exit_true != nullptr)
     {
         // Unconditional jump to exit_true
-        if (exit_true->label != ".Lepilogue") { // Already have jmp to end with return statement
+        if (exit_true->label != ".Lepilogue")
+        { // Already have jmp to end with return statement
             o << "    jmp " << exit_true->label << "\n";
         }
-        
-    } else { // si on est à la fin de cfg (fin de function)
+    }
+    else
+    { // si on est à la fin de cfg (fin de function)
         cfg->gen_asm_epilogue(o);
     }
 }
@@ -402,18 +397,19 @@ void CFG::gen_asm(std::ostream &o)
         if (i == 0)
         {
             gen_asm_prologue(o);
-            o << "    jmp " <<  bbs[i]->exit_true->label << "\n";
-        } else {
+            o << "    jmp " << bbs[i]->exit_true->label << "\n";
+        }
+        else
+        {
             bbs[i]->gen_asm(o);
         }
     }
-
 }
 
-std::string CFG::IR_reg_to_asm(std::string& reg)
+std::string CFG::IR_reg_to_asm(std::string &reg)
 {
     // Utilise la table des symboles pour obtenir l'index et calcule l'offset mémoire.
-    Symbol* p = currentScope->findVariable(reg);
+    Symbol *p = currentScope->findVariable(reg);
     if (p != nullptr)
     {
         if (p->scopeType == GLOBAL)
@@ -424,7 +420,6 @@ std::string CFG::IR_reg_to_asm(std::string& reg)
     }
     return reg;
 }
-
 
 void CFG::gen_asm_prologue(std::ostream &o)
 {
@@ -440,7 +435,7 @@ void CFG::gen_asm_epilogue(std::ostream &o)
 
 int CFG::get_var_index(std::string name)
 {
-    Symbol* s = currentScope->findVariable(name);
+    Symbol *s = currentScope->findVariable(name);
     return s->offset;
 }
 
@@ -481,7 +476,8 @@ std::string GVM::addTempConstVariable(std::string type, int value)
 void GVM::gen_asm(std::ostream &o)
 {
     // Verifier si on a des variables globales
-    if (globalScope->getNumberVariable() == 0) return;
+    if (globalScope->getNumberVariable() == 0)
+        return;
 
     o << "    .data\n";
 
@@ -489,12 +485,16 @@ void GVM::gen_asm(std::ostream &o)
     for (auto var : globalScope->getTable())
     {
         // check if var is temp variable
-        if (SymbolTable::isTempVariable(var.first)) continue;
+        if (SymbolTable::isTempVariable(var.first))
+            continue;
         o << "    .globl " << var.first << "\n";
         o << var.first << ":\n";
-        if (globalVariableValues.count(var.first) == 0) {
+        if (globalVariableValues.count(var.first) == 0)
+        {
             o << "    .zero 4\n";
-        } else {
+        }
+        else
+        {
             o << "    .long " << globalVariableValues[var.first] << "\n";
         }
     }
