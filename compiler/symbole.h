@@ -2,6 +2,7 @@
 #define SYMBOLE_H
 
 enum VarType {
+    VOID,
     INT,
     CHAR
 };
@@ -41,6 +42,23 @@ class Symbol
         VarType type;
         int offset;
         ScopeType scopeType;
+
+        static VarType getType(std::string strType ) {
+            if (strType == "int") return VarType::INT;
+            if (strType == "char") return VarType::CHAR;
+            if (strType == "void") return VarType::VOID;
+            std::cerr << "error: unknown type " << strType << std::endl;
+            exit(1);
+        }
+
+        static std::string getTypeStr(VarType type) {
+            switch (type) {
+                case VarType::INT: return "int";
+                case VarType::CHAR: return "char";
+                case VarType::VOID: return "void";
+                default: return "unknown";
+            }
+        }
         
     private:
         bool isCst = false;

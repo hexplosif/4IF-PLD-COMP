@@ -2,9 +2,20 @@ grammar ifcc;
 
 axiom : prog EOF ;
 
-prog : (decl_stmt)* 'int' 'main' '(' ')' block ;
+prog : (decl_stmt | function_definition)*;
+
+// Function
+function_definition
+    : retType VAR '(' parameterList? ')' block
+    ;
+
+retType : type | 'void' ;
+parameterList : parameter (',' parameter)* ;
+parameter : type VAR ;
 
 block : '{' stmt* '}' ;
+
+// Statements
 
 stmt 
     : decl_stmt              # DeclarationStatement
@@ -21,9 +32,11 @@ decl_stmt : type sub_decl (',' sub_decl)* ';' ;         // Déclaration avec ou 
 sub_decl : (VAR ('=' expr)?) | (VAR '[' CONST ']' ('=' '{' CONST(',' CONST)* '}' )?);         // Sub-règle pour les déclarations
 assign_stmt : (VAR | VAR '[' expr ']') op_assign expr ';';                   // Affectation
 op_assign: '=' | '+=' | '-=' | '*=' | '/=' | '%=';
-return_stmt : 'return' expr ';' ;                       // On retourne une expression
+return_stmt : 'return' (expr)? ';' ;                       // On retourne une expression
 if_stmt : 'if' '(' expr ')' stmt ('else' stmt)? ;       // If statement
 while_stmt : 'while' '(' expr ')' stmt ;                // While statement
+
+// Expressions
 
 expr
     : VAR '++'							            # PostIncrementExpression

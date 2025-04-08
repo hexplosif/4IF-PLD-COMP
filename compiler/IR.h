@@ -1,5 +1,8 @@
+#define EPILOGUE_LABEL 
+
 #ifndef IR_H
 #define IR_H
+
 
 #include <vector>
 #include <string>
@@ -7,13 +10,12 @@
 #include <iostream>
 #include <initializer_list>
 #include <map>       // Ajout pour std::map
+#include "DefFunction.h"
 #include "symbole.h"
 #include "SymbolTable.h"  // Inclure notre table des symboles
 
 class BasicBlock;
 class CFG;
-class DefFonction;
-
 
 //! The class for one 3-address instruction
 class IRInstr {
@@ -106,6 +108,7 @@ public:
     std::string IR_reg_to_asm(std::string& reg, bool ignoreCst = false); /**< helper method: inputs a IR reg or input variable, returns e.g. "-24(%rbp)" for the proper value of 24 */
     void gen_asm_prologue(std::ostream& o);
     void gen_asm_epilogue(std::ostream& o);
+    std::string get_epilogue_label();  /**< returns the label of the epilogue */
 
     // symbol table methods: désormais déléguées à SymbolTable
     int get_var_index(std::string name);
@@ -116,12 +119,10 @@ public:
 
     // On remplace ces membres par notre instance de SymbolTable
     SymbolTable* currentScope = nullptr; /**< the symbol table of the current scope */
+    int getStackSize();
 
 protected:
-
-    int nextFreeSymbolIndex; /**< to allocate new symbols in the symbol table */
-    int nextBBnumber; /**< just for naming */
-
+    static int nextBBnumber; /**< just for naming */
     std::vector<BasicBlock*> bbs; /**< all the basic blocks of this CFG*/
 };
 
@@ -132,9 +133,9 @@ class GVM { // Global Variable Manager
         GVM();
         void gen_asm(std::ostream& o);
 
-        void addGlobalVariable(std::string name, std::string type);
+        void addGlobalVariable(std::string name, VarType type);
         void setGlobalVariableValue(std::string name, int value);
-        std::string addTempConstVariable(std::string type, int value);
+        std::string addTempConstVariable(VarType type, int value);
 
         SymbolTable* getGlobalScope() { return globalScope; }
 

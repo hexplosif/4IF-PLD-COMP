@@ -7,14 +7,14 @@ SymbolTable::SymbolTable( int initialOffset ) {
     this->currentDeclOffset = initialOffset;
 }
 
-Symbol SymbolTable::addLocalVariable(std::string name, std::string type, int size) {
+Symbol SymbolTable::addLocalVariable(std::string name, VarType type, int size) {
     if (findVariableThisScope(name) == nullptr) {
         if (size > 0) {
             currentDeclOffset += size * 4;
         } else {
             currentDeclOffset += 4;
         }
-        Symbol p = { getType(type) , currentDeclOffset, ScopeType::BLOCK };
+        Symbol p = { type, currentDeclOffset, ScopeType::BLOCK };
         table[name] = p;
         return p;
     } else {
@@ -23,9 +23,9 @@ Symbol SymbolTable::addLocalVariable(std::string name, std::string type, int siz
     }
 }
 
-Symbol SymbolTable::addGlobalVariable(std::string name, std::string type) {
+Symbol SymbolTable::addGlobalVariable(std::string name, VarType type) {
     if (findVariableThisScope(name) == nullptr) {
-        Symbol p = { getType(type) , currentDeclOffset, ScopeType::GLOBAL };
+        Symbol p = { type , currentDeclOffset, ScopeType::GLOBAL };
         table[name] = p; 
         return p;
     } else {
@@ -34,18 +34,18 @@ Symbol SymbolTable::addGlobalVariable(std::string name, std::string type) {
     }
 }
 
-std::string SymbolTable::addTempVariable(std::string type) {
+std::string SymbolTable::addTempVariable(VarType type) {
     currentDeclOffset += 4;
     std::string name = "!tmp" + std::to_string(currentDeclOffset);
-    Symbol p = { getType(type) , currentDeclOffset, ScopeType::BLOCK };
+    Symbol p = { type, currentDeclOffset, ScopeType::BLOCK };
     table[name] = p;
     return name;
 }
 
-std::string SymbolTable::addTempConstVariable(std::string type, int value) {
+std::string SymbolTable::addTempConstVariable(VarType type, int value) {
     currentDeclOffset += 4;
     std::string name = "!tmp" + std::to_string(currentDeclOffset);
-    Symbol p = { getType(type) , currentDeclOffset, ScopeType::BLOCK, value };
+    Symbol p = { type , currentDeclOffset, ScopeType::BLOCK, value };
     table[name] = p;
     return name;
 }
@@ -93,13 +93,6 @@ bool SymbolTable::isGlobalScope() {
     return parent == nullptr;
 }
 
-VarType SymbolTable::getType( std::string strType ) {
-    if (strType == "int") return VarType::INT;
-    if (strType == "char") return VarType::CHAR;
-    std::cerr << "error: unknown type " << strType << std::endl;
-    exit(1);
-}
-
 void SymbolTable::printTable() {
     std::cout << "================== Symbol Table ==================" << std::endl;
     std::cout << "| Name       | Type   | Scope           | Offset |" << std::endl;
@@ -130,4 +123,18 @@ void SymbolTable::printTable() {
 
 bool SymbolTable::isTempVariable(std::string name) {
     return name.find("!tmp") != std::string::npos;
+}
+
+VarType SymbolTable::getHigherType(VarType type1, VarType type2) {
+    int rankType1 = std::find(numberTypeRank.begin(), numberTypeRank.end(), type1) - numberTypeRank.begin();
+    int rankType2 = std::find(numberTypeRank.begin(), numberTypeRank.end(), type2) - numberTypeRank.begin();
+    if (rankType1 == numberTypeRank.end() - numberTypeRank.begin() || rankType2 == numberTypeRank.end() - numberTypeRank.begin()) {
+        std::cerr << "error: can not convert type from " << Symbol::getTypeStr(type1) << " to " << Symbol::getTypeStr(type2) << std::endl;
+        exit(1);
+    }
+    return numberTypeRank[std::max(rankType1, rankType2)];
+}
+
+bool SymbolTable::isTypeCompatible(VarType type1, VarType type2) {
+    return (type1 == type2 || (type1 == INT && type2 == CHAR) || (type1 == CHAR && type2 == INT));
 }
