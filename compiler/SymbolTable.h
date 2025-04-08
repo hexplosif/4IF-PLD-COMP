@@ -2,6 +2,7 @@
 
 #include <iostream>
 #include <map>
+#include <algorithm>
 #include "symbole.h"
 
 class SymbolTable
@@ -13,10 +14,10 @@ class SymbolTable
     public:
         SymbolTable( int initialOffset );
 
-        Symbol addLocalVariable(std::string name, std::string type, int size = -1); //return offset
-        Symbol addGlobalVariable(std::string name, std::string type);
-        std::string addTempVariable(std::string type); //return name
-        std::string addTempConstVariable(std::string type, int value); //return name
+        Symbol addLocalVariable(std::string name, VarType type, int size = -1); //return offset
+        Symbol addGlobalVariable(std::string name, VarType type);
+        std::string addTempVariable(VarType type); //return name
+        std::string addTempConstVariable(VarType type, int value); //return name
 
         void freeLastTempVariable(); // free last temp variable
 
@@ -35,22 +36,15 @@ class SymbolTable
 
         void printTable();
         static bool isTempVariable(std::string name);
-
-        void infoVariable(std::string name) {
-            Symbol* var = findVariable(name);
-            if (var != nullptr) {
-                std::cout << "Variable: " << name;
-                var->info();
-            } else {
-                std::cout << "Variable not found: " << name << std::endl;
-            }
-        }
+        static VarType getHigherType(VarType type1, VarType type2);
+        static bool isTypeCompatible(VarType type1, VarType type2);
 
     private:
         std::map<std::string, Symbol> table;
         int currentDeclOffset = 0;
 
         SymbolTable *parent = nullptr;
+        static constexpr std::array<VarType, 2> numberTypeRank = {VarType::CHAR, VarType::INT};
+        // char < int < unsigned int < long < unsigned long < long long < unsigned long long < float < double < long double
 
-        VarType getType(std::string strType );
 };

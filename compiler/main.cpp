@@ -13,6 +13,17 @@
 using namespace antlr4;
 using namespace std;
 
+std::map<std::string, DefFonction*> predefinedFunctions; /**< map of all functions in the program */
+void predefineFunctions() {
+    predefinedFunctions = std::map<std::string, DefFonction*>();
+
+    predefinedFunctions["putchar"] = new DefFonction("putchar", VarType::CHAR);
+    predefinedFunctions["putchar"]->setParameters({VarType::CHAR});
+
+    predefinedFunctions["getchar"] = new DefFonction("getchar", VarType::CHAR);
+    predefinedFunctions["getchar"]->setParameters({});
+}
+
 int main(int argn, const char **argv)
 {
     if(argn != 2) {
@@ -41,6 +52,8 @@ int main(int argn, const char **argv)
         cerr << "error: syntax error during parsing" << endl;
         exit(1);
     }
+
+    predefineFunctions();
 
     // Le visiteur construit le CFG/IR et, en fin de visite, génère le code assembleur sur stdout.
     CodeGenVisitor v;

@@ -10,6 +10,7 @@
 #include <iostream>
 #include <initializer_list>
 #include <map>       // Ajout pour std::map
+#include "DefFunction.h"
 #include "symbole.h"
 #include "SymbolTable.h"  // Inclure notre table des symboles
 
@@ -132,9 +133,9 @@ class GVM { // Global Variable Manager
         GVM();
         void gen_asm(std::ostream& o);
 
-        void addGlobalVariable(std::string name, std::string type);
+        void addGlobalVariable(std::string name, VarType type);
         void setGlobalVariableValue(std::string name, int value);
-        std::string addTempConstVariable(std::string type, int value);
+        std::string addTempConstVariable(VarType type, int value);
 
         SymbolTable* getGlobalScope() { return globalScope; }
 

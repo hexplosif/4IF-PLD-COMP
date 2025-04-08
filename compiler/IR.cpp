@@ -394,7 +394,7 @@ void CFG::add_bb(BasicBlock *bb)
 
 void CFG::gen_asm(std::ostream &o)
 {
-    o << ".global " << ast->name << "\n";
+    o << ".global " << ast->getName() << "\n";
     for (size_t i = 0; i < bbs.size(); i++)
     {
         o << bbs[i]->label << ":\n";
@@ -451,7 +451,7 @@ std::string CFG::new_BB_name()
 
 std::string CFG::get_epilogue_label()
 {
-    return std::string(".Lepilogue") + "_" + ast->name;
+    return std::string(".Lepilogue") + "_" + ast->getName();
 }
 
 int CFG::getStackSize()
@@ -465,7 +465,7 @@ GVM::GVM()
     globalScope = new SymbolTable(0);
 }
 
-void GVM::addGlobalVariable(std::string name, std::string type)
+void GVM::addGlobalVariable(std::string name, VarType type)
 {
     globalScope->addGlobalVariable(name, type);
 }
@@ -483,7 +483,7 @@ void GVM::setGlobalVariableValue(std::string name, int value)
     }
 }
 
-std::string GVM::addTempConstVariable(std::string type, int value)
+std::string GVM::addTempConstVariable(VarType type, int value)
 {
     return globalScope->addTempConstVariable(type, value);
 }

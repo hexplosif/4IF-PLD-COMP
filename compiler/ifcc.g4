@@ -32,7 +32,7 @@ decl_stmt : type sub_decl (',' sub_decl)* ';' ;         // Déclaration avec ou 
 sub_decl : VAR ('=' expr)? | VAR '[' CONST ']';         // Sub-règle pour les déclarations
 assign_stmt : (VAR | VAR '[' expr ']') op_assign expr ';';                   // Affectation
 op_assign: '=' | '+=' | '-=' | '*=' | '/=' | '%=';
-return_stmt : 'return' expr ';' ;                       // On retourne une expression
+return_stmt : 'return' (expr)? ';' ;                       // On retourne une expression
 if_stmt : 'if' '(' expr ')' stmt ('else' stmt)? ;       // If statement
 while_stmt : 'while' '(' expr ')' stmt ;                // While statement
 

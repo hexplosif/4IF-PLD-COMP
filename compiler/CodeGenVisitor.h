@@ -20,16 +20,20 @@ private:
     CFG* currentCfg = nullptr; // Control Flow Graph
     
     Symbol* findVariable(std::string varName);
-    std::string addTempConstVariable(std::string type, int value);
+    std::string addTempConstVariable(VarType type, int value);
     void freeLastTempVariable(int inbVar);
 
     std::string constantOptimizeBinaryOp(std::string &left, std::string &right, IRInstr::Operation op);
     std::string constantOptimizeUnaryOp(std::string &left, IRInstr::Operation op);
     int getConstantResultBinaryOp(int leftValue, int rightValue, IRInstr::Operation op);
-    int getConstantResultUnaryOp(int leftValue, IRInstr::Operation op);
+    int getConstantResultUnaryOp(int cstValue, IRInstr::Operation op);
+
+    VarType getTypeExpr(std::string left, std::string right);
 
     void enterNewScope();
     void exitCurrentScope();
+
+    DefFonction* getAstFunction(std::string name);
 
 public:
     void gen_asm(std::ostream& o);
