@@ -26,7 +26,8 @@ void IRInstr::gen_asm(std::ostream &o)
     case copy:
         // copy: params[0] = destination, params[1] = source
         o << "    movl " << params[1] << ", %eax\n";
-        o << "    movl %eax, " << params[0] << "\n"; // Stocke le résultat
+        if (params[0] != "%eax")
+            o << "    movl %eax, " << params[0] << "\n"; // Stocke le résultat
         break;
     case add:
         // add: params[0] = dest, params[1] = gauche, params[2] = droite
@@ -366,7 +367,7 @@ void BasicBlock::gen_asm(std::ostream &o)
     else if (exit_true != nullptr)
     {
         // Unconditional jump to exit_true
-        if (exit_true->label != ".Lepilogue")
+        if (exit_true->label != cfg->get_epilogue_label())
         { // Already have jmp to end with return statement
             o << "    jmp " << exit_true->label << "\n";
         }
@@ -379,12 +380,11 @@ void BasicBlock::gen_asm(std::ostream &o)
 
 /* ---------------------- CFG ---------------------- */
 
-CFG::CFG(DefFonction *ast) : ast(ast), nextFreeSymbolIndex(0), nextBBnumber(0), current_bb(nullptr)
+int CFG::nextBBnumber = 0;
+
+CFG::CFG(DefFonction *ast) : ast(ast), current_bb(nullptr)
 {
-    this->ast = ast;
-    // Création du bloc d'entrée ("main")
-    current_bb = new BasicBlock(this, "main");
-    bbs.push_back(current_bb);
+    bbs = std::vector<BasicBlock *>();
 }
 
 void CFG::add_bb(BasicBlock *bb)
@@ -394,19 +394,15 @@ void CFG::add_bb(BasicBlock *bb)
 
 void CFG::gen_asm(std::ostream &o)
 {
-    o << ".global main\n";
+    o << ".global " << ast->name << "\n";
     for (size_t i = 0; i < bbs.size(); i++)
     {
         o << bbs[i]->label << ":\n";
         if (i == 0)
         {
             gen_asm_prologue(o);
-            o << "    jmp " << bbs[i]->exit_true->label << "\n";
         }
-        else
-        {
-            bbs[i]->gen_asm(o);
-        }
+        bbs[i]->gen_asm(o);
     }
 }
 
@@ -433,11 +429,12 @@ void CFG::gen_asm_prologue(std::ostream &o)
 {
     o << "    pushq %rbp\n";
     o << "    movq %rsp, %rbp\n";
+    o << "    subq $" << getStackSize() << ", %rsp\n";
 }
 
 void CFG::gen_asm_epilogue(std::ostream &o)
 {
-    o << "    popq %rbp\n";
+    o << "    leave\n";
     o << "    ret\n";
 }
 
@@ -449,7 +446,17 @@ int CFG::get_var_index(std::string name)
 
 std::string CFG::new_BB_name()
 {
-    return "BB" + std::to_string(nextBBnumber++);
+    return ".BB" + std::to_string(nextBBnumber++);
+}
+
+std::string CFG::get_epilogue_label()
+{
+    return std::string(".Lepilogue") + "_" + ast->name;
+}
+
+int CFG::getStackSize()
+{
+    return currentScope->getCurrentDeclOffset() / 16 * 16 + 16; // Round up to the next multiple of 16
 }
 
 /* ---------------------- GVM ---------------------- */

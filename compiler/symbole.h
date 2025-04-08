@@ -2,6 +2,7 @@
 #define SYMBOLE_H
 
 enum VarType {
+    VOID,
     INT,
     CHAR
 };
@@ -10,6 +11,21 @@ enum ScopeType {
     GLOBAL,
     FUNCTION_PARAMS,
     BLOCK
+};
+
+struct Parameters
+{
+    VarType type;
+    int offset;
+    ScopeType scopeType;
+};
+
+class DefFonction {
+    public:
+        DefFonction(std::string name, VarType type) : name(name), type(type) {}
+        std::string name;
+        VarType type;
+        std::map<std::string, Parameters> params;
 };
 
 class Symbol 

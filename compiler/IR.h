@@ -1,5 +1,8 @@
+#define EPILOGUE_LABEL 
+
 #ifndef IR_H
 #define IR_H
+
 
 #include <vector>
 #include <string>
@@ -12,8 +15,6 @@
 
 class BasicBlock;
 class CFG;
-class DefFonction;
-
 
 //! The class for one 3-address instruction
 class IRInstr {
@@ -106,6 +107,7 @@ public:
     std::string IR_reg_to_asm(std::string& reg, bool ignoreCst = false); /**< helper method: inputs a IR reg or input variable, returns e.g. "-24(%rbp)" for the proper value of 24 */
     void gen_asm_prologue(std::ostream& o);
     void gen_asm_epilogue(std::ostream& o);
+    std::string get_epilogue_label();  /**< returns the label of the epilogue */
 
     // symbol table methods: désormais déléguées à SymbolTable
     int get_var_index(std::string name);
@@ -116,12 +118,10 @@ public:
 
     // On remplace ces membres par notre instance de SymbolTable
     SymbolTable* currentScope = nullptr; /**< the symbol table of the current scope */
+    int getStackSize();
 
 protected:
-
-    int nextFreeSymbolIndex; /**< to allocate new symbols in the symbol table */
-    int nextBBnumber; /**< just for naming */
-
+    static int nextBBnumber; /**< just for naming */
     std::vector<BasicBlock*> bbs; /**< all the basic blocks of this CFG*/
 };
 

@@ -45,6 +45,7 @@ int main(int argn, const char **argv)
     // Le visiteur construit le CFG/IR et, en fin de visite, génère le code assembleur sur stdout.
     CodeGenVisitor v;
     v.visit(tree);
+    v.gen_asm(cout);
 
     return 0;
 }

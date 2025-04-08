@@ -10,12 +10,12 @@ using namespace std;
  * Pour cette implémentation, nous utilisons un CFG global (pour la fonction main).
  * En pratique, vous pouvez encapsuler cela dans une classe plus élaborée.
  */
-CFG *cfg = nullptr;
 
 antlrcpp::Any CodeGenVisitor::visitProg(ifccParser::ProgContext *ctx)
 {
     // Création du GVM (Global Variable Manager)
     gvm = new GVM();
+    cfgs = vector<CFG*>();
 
     // Le programme est : (decl_stmt)* 'int' 'main' '(' ')' block
     // On traite ici les déclarations globales
@@ -24,27 +24,67 @@ antlrcpp::Any CodeGenVisitor::visitProg(ifccParser::ProgContext *ctx)
         this->visit(decl);
     }
 
-    // Création du CFG pour main (l'AST de la fonction est ici nullptr pour simplifier)
-    // TODO: if this block is a function block, we need to create a new cfg and scope for the function
-    cfg = new CFG(nullptr);
-    cfg->currentScope = new SymbolTable(0);
-    cfg->currentScope->setParent(gvm->getGlobalScope());
+    // On traite les fonctions
+    for (auto func : ctx->function_definition())
+    {
+        this->visit(func);
+    }
 
-    BasicBlock *bbStart = new BasicBlock(cfg, cfg->new_BB_name());
-    cfg->add_bb(bbStart);
-    cfg->current_bb->exit_true = bbStart;
-    cfg->current_bb = bbStart;
+    return 0;
+}
 
-    // On traite ici le bloc principal
+antlrcpp::Any CodeGenVisitor::visitFunction_definition(ifccParser::Function_definitionContext *ctx)
+{
+    string funcName = ctx->VAR()->getText(); //TODO: verify if same name is declared twice
+    DefFonction *funcDef = new DefFonction(funcName, VarType::INT); //TODO: modify to get the type of the function
+
+    // On crée un CFG pour la fonction
+    currentCfg = new CFG(funcDef);
+    cfgs.push_back(currentCfg);
+    currentCfg->currentScope = new SymbolTable(0);
+    currentCfg->currentScope->setParent(gvm->getGlobalScope());
+
+    // Création du bloc d'entrée
+    BasicBlock* enterBlock = new BasicBlock(currentCfg, funcName);
+    currentCfg->add_bb(enterBlock);
+    currentCfg->current_bb = enterBlock;
+
+    // Process the parameter list if present (copy arguments from registers to stack).
+    if (ctx->parameterList())
+    {
+        int paramsSize = (ctx->parameterList()->parameter()).size();
+        if (paramsSize > 6)
+        {
+            std::cerr << "error: function with more than 6 params is not supported! " << "\n";
+            exit(1);
+        }
+
+        for (int i = 0; i < paramsSize; i ++)
+        {
+            auto param = ctx->parameterList()->parameter(i);
+            string type = param->type()->getText();
+            string paramName = param->VAR()->getText();
+
+            currentCfg->currentScope->addLocalVariable(paramName, type); //TODO: modify to get the type of the params
+            currentCfg->current_bb->add_IRInstr(IRInstr::copy, VarType::INT, {paramName, argRegs[i]}); //TODO: modify to get the type of the params
+        }
+    }
+
+    // On crée le bloc de début de la fonction
+    BasicBlock *bbStart = new BasicBlock(currentCfg, currentCfg->new_BB_name());
+    currentCfg->add_bb(bbStart);
+    enterBlock->exit_true = bbStart;
+    currentCfg->current_bb = bbStart;
+
+    // On traite le bloc de la fonction
     this->visit(ctx->block());
 
-    BasicBlock *bbEnd = new BasicBlock(cfg, ".Lepilogue");
-    cfg->add_bb(bbEnd);
-    cfg->current_bb->exit_true = bbEnd;
+    // On crée le bloc de fin de la fonction
+    BasicBlock *bbEnd = new BasicBlock(currentCfg, currentCfg->get_epilogue_label());
+    currentCfg->add_bb(bbEnd);
+    currentCfg->current_bb->exit_true = bbEnd;
 
-    // Une fois le CFG construit, on génère le code assembleur.
-    gvm->gen_asm(std::cout);
-    cfg->gen_asm(std::cout);
+    currentCfg = nullptr; // On remet le CFG à nullptr pour éviter les erreurs de traitement
     return 0;
 }
 
@@ -77,7 +117,7 @@ antlrcpp::Any CodeGenVisitor::visitDecl_stmt(ifccParser::Decl_stmtContext *ctx)
 
 antlrcpp::Any CodeGenVisitor::visitSub_declWithType(ifccParser::Sub_declContext *ctx, string varType)
 {
-    bool isGlobalScope = (cfg == nullptr);
+    bool isGlobalScope = (currentCfg == nullptr);
     string varName = ctx->VAR()->getText();
 
     if (isGlobalScope)
@@ -102,14 +142,14 @@ antlrcpp::Any CodeGenVisitor::visitSub_declWithType(ifccParser::Sub_declContext 
         if (ctx->CONST() != nullptr)
         { // C'est un tableau
             int size = std::stoi(ctx->CONST()->getText());
-            cfg->currentScope->addLocalVariable(varName, varType, size);
+            currentCfg->currentScope->addLocalVariable(varName, varType, size);
         }
         else
         {
-            cfg->currentScope->addLocalVariable(varName, varType);
+            currentCfg->currentScope->addLocalVariable(varName, varType);
             if (ctx->expr()) {
                 string expr = any_cast<string>(visit(ctx->expr()));
-                cfg->current_bb->add_IRInstr(IRInstr::copy, VarType::INT, {varName, expr});
+                currentCfg->current_bb->add_IRInstr(IRInstr::copy, VarType::INT, {varName, expr});
                 
                 if (findVariable(expr)->isConstant()) {
                     freeLastTempVariable(1);
@@ -141,29 +181,29 @@ antlrcpp::Any CodeGenVisitor::visitAssignmentStatement(ifccParser::AssignmentSta
         string exprResult = any_cast<string>(this->visit(assign->expr(1)));
         if (op == "=")
         {
-            cfg->current_bb->add_IRInstr(IRInstr::copyTblx, VarType::INT, {varName, exprResult, pos});
+            currentCfg->current_bb->add_IRInstr(IRInstr::copyTblx, VarType::INT, {varName, exprResult, pos});
         }
         else if (op == "+=")
         {
-            cfg->current_bb->add_IRInstr(IRInstr::addTblx, VarType::INT, {varName, exprResult, pos});
+            currentCfg->current_bb->add_IRInstr(IRInstr::addTblx, VarType::INT, {varName, exprResult, pos});
         }
         else if (op == "-=")
         {
-            cfg->current_bb->add_IRInstr(IRInstr::subTblx, VarType::INT, {varName, exprResult, pos});
+            currentCfg->current_bb->add_IRInstr(IRInstr::subTblx, VarType::INT, {varName, exprResult, pos});
         }
         else if (op == "*=")
         {
-            cfg->current_bb->add_IRInstr(IRInstr::mulTblx, VarType::INT, {varName, exprResult, pos});
+            currentCfg->current_bb->add_IRInstr(IRInstr::mulTblx, VarType::INT, {varName, exprResult, pos});
         }
         else if (op == "/=")
         {
-            cfg->current_bb->add_IRInstr(IRInstr::copy, VarType::INT, {"%esi", exprResult});
-            cfg->current_bb->add_IRInstr(IRInstr::divTblx, VarType::INT, {varName, "%esi", pos});
+            currentCfg->current_bb->add_IRInstr(IRInstr::copy, VarType::INT, {"%esi", exprResult});
+            currentCfg->current_bb->add_IRInstr(IRInstr::divTblx, VarType::INT, {varName, "%esi", pos});
         }
         else if (op == "%=")
         {
-            cfg->current_bb->add_IRInstr(IRInstr::copy, VarType::INT, {"%esi", exprResult});
-            cfg->current_bb->add_IRInstr(IRInstr::modTblx, VarType::INT, {varName, "%esi", pos});
+            currentCfg->current_bb->add_IRInstr(IRInstr::copy, VarType::INT, {"%esi", exprResult});
+            currentCfg->current_bb->add_IRInstr(IRInstr::modTblx, VarType::INT, {varName, "%esi", pos});
         }
     }
     else
@@ -171,30 +211,30 @@ antlrcpp::Any CodeGenVisitor::visitAssignmentStatement(ifccParser::AssignmentSta
         string exprResult = any_cast<string>(this->visit(assign->expr(0)));
         if (op == "=")
         {
-            cfg->current_bb->add_IRInstr(IRInstr::copy, VarType::INT, {varName, exprResult});
+            currentCfg->current_bb->add_IRInstr(IRInstr::copy, VarType::INT, {varName, exprResult});
         }
         else if (op == "+=")
         {
-            cfg->current_bb->add_IRInstr(IRInstr::add, VarType::INT, {varName, varName, exprResult});
+            currentCfg->current_bb->add_IRInstr(IRInstr::add, VarType::INT, {varName, varName, exprResult});
         }
         else if (op == "-=")
         {
-            cfg->current_bb->add_IRInstr(IRInstr::sub, VarType::INT, {varName, varName, exprResult});
+            currentCfg->current_bb->add_IRInstr(IRInstr::sub, VarType::INT, {varName, varName, exprResult});
         }
         else if (op == "*=")
         {
-            cfg->current_bb->add_IRInstr(IRInstr::mul, VarType::INT, {varName, varName, exprResult});
+            currentCfg->current_bb->add_IRInstr(IRInstr::mul, VarType::INT, {varName, varName, exprResult});
         }
         else if (op == "/=")
         {
-            cfg->current_bb->add_IRInstr(IRInstr::copy, VarType::INT, {"%ecx", exprResult});
-            cfg->current_bb->add_IRInstr(IRInstr::div, VarType::INT, {varName, varName, "%ecx"});
+            currentCfg->current_bb->add_IRInstr(IRInstr::copy, VarType::INT, {"%ecx", exprResult});
+            currentCfg->current_bb->add_IRInstr(IRInstr::div, VarType::INT, {varName, varName, "%ecx"});
             // cfg->current_bb->add_IRInstr(IRInstr::copy, VarType::INT, {varName, varName, exprResult});
         }
         else if (op == "%=")
         {
-            cfg->current_bb->add_IRInstr(IRInstr::copy, VarType::INT, {"%ecx", exprResult});
-            cfg->current_bb->add_IRInstr(IRInstr::mod, VarType::INT, {varName, varName, "%ecx"});
+            currentCfg->current_bb->add_IRInstr(IRInstr::copy, VarType::INT, {"%ecx", exprResult});
+            currentCfg->current_bb->add_IRInstr(IRInstr::mod, VarType::INT, {varName, varName, "%ecx"});
             // cfg->current_bb->add_IRInstr(IRInstr::copy, VarType::INT, {varName, varName, exprResult});
         }
 
@@ -209,14 +249,14 @@ antlrcpp::Any CodeGenVisitor::visitReturn_stmt(ifccParser::Return_stmtContext *c
 {
     // Évalue l'expression de retour
     std::string exprResult = any_cast<std::string>(this->visit(ctx->expr()));
-    cfg->current_bb->add_IRInstr(IRInstr::copy, VarType::INT, {"%eax", exprResult});
+    currentCfg->current_bb->add_IRInstr(IRInstr::copy, VarType::INT, {"%eax", exprResult});
 
     if (findVariable(exprResult)->isConstant()) {
         freeLastTempVariable(1);
     }
     
     // Ajoute un saut vers l'épilogue
-    cfg->current_bb->add_IRInstr(IRInstr::jmp, VarType::INT, {".Lepilogue"});
+    currentCfg->current_bb->add_IRInstr(IRInstr::jmp, VarType::INT, {currentCfg->get_epilogue_label()});
     return exprResult;
 }
 
@@ -245,8 +285,8 @@ antlrcpp::Any CodeGenVisitor::visitAddSubExpression(ifccParser::AddSubExpression
         return constOpt;
     }
     
-    string tmp = cfg->currentScope->addTempVariable("int");
-    cfg->current_bb->add_IRInstr(op, VarType::INT, {tmp, left, right});
+    string tmp = currentCfg->currentScope->addTempVariable("int");
+    currentCfg->current_bb->add_IRInstr(op, VarType::INT, {tmp, left, right});
     return tmp;
 }
 
@@ -275,13 +315,13 @@ antlrcpp::Any CodeGenVisitor::visitMulDivExpression(ifccParser::MulDivExpression
         return constOpt;
     }
     
-    string tmp = cfg->currentScope->addTempVariable("int");
+    string tmp = currentCfg->currentScope->addTempVariable("int");
     if (op == IRInstr::Operation::div || op == IRInstr::Operation::mod)
     {
-        cfg->current_bb->add_IRInstr(IRInstr::copy, VarType::INT, {"%ecx", right});
-        cfg->current_bb->add_IRInstr(op, VarType::INT, {tmp, left, "%ecx"});
+        currentCfg->current_bb->add_IRInstr(IRInstr::copy, VarType::INT, {"%ecx", right});
+        currentCfg->current_bb->add_IRInstr(op, VarType::INT, {tmp, left, "%ecx"});
     } else {
-        cfg->current_bb->add_IRInstr(op, VarType::INT, {tmp, left, right});
+        currentCfg->current_bb->add_IRInstr(op, VarType::INT, {tmp, left, right});
     }
     return tmp;
 }
@@ -328,7 +368,7 @@ antlrcpp::Any CodeGenVisitor::visitComparisonExpression(ifccParser::ComparisonEx
     // expr op=('=='|'<'|'<='|'>'|'>=') expr
     string left = any_cast<string>(this->visit(ctx->expr(0)));
     string right = any_cast<string>(this->visit(ctx->expr(1)));
-    string temp = cfg->currentScope->addTempVariable("int");
+    string temp = currentCfg->currentScope->addTempVariable("int");
 
     string op = ctx->op->getText();
     IRInstr::Operation cmpOp;
@@ -352,7 +392,7 @@ antlrcpp::Any CodeGenVisitor::visitComparisonExpression(ifccParser::ComparisonEx
         return constOpt;
     }
 
-    cfg->current_bb->add_IRInstr(cmpOp, VarType::INT, {temp, left, right});
+    currentCfg->current_bb->add_IRInstr(cmpOp, VarType::INT, {temp, left, right});
     return temp;
 }
 
@@ -361,7 +401,7 @@ antlrcpp::Any CodeGenVisitor::visitBitwiseExpression(ifccParser::BitwiseExpressi
     // expr op=('&'|'|'|'^') expr
     string left = any_cast<string>(this->visit(ctx->expr(0)));
     string right = any_cast<string>(this->visit(ctx->expr(1)));
-    string temp = cfg->currentScope->addTempVariable("int");
+    string temp = currentCfg->currentScope->addTempVariable("int");
 
     string op = ctx->op->getText();
     IRInstr::Operation bitOp;
@@ -379,7 +419,7 @@ antlrcpp::Any CodeGenVisitor::visitBitwiseExpression(ifccParser::BitwiseExpressi
         return constOpt;
     }
 
-    cfg->current_bb->add_IRInstr(bitOp, VarType::INT, {temp, left, right});
+    currentCfg->current_bb->add_IRInstr(bitOp, VarType::INT, {temp, left, right});
     return temp;
 }
 
@@ -387,7 +427,7 @@ antlrcpp::Any CodeGenVisitor::visitUnaryExpression(ifccParser::UnaryExpressionCo
 {
     // op=('-'|'!') expr
     string expr = any_cast<string>(this->visit(ctx->expr()));
-    string temp = cfg->currentScope->addTempVariable("int");
+    string temp = currentCfg->currentScope->addTempVariable("int");
 
     string op = ctx->op->getText();
     IRInstr::Operation unaryOp;
@@ -403,7 +443,7 @@ antlrcpp::Any CodeGenVisitor::visitUnaryExpression(ifccParser::UnaryExpressionCo
         return constOpt;
     }
 
-    cfg->current_bb->add_IRInstr(unaryOp, VarType::INT, {temp, expr});
+    currentCfg->current_bb->add_IRInstr(unaryOp, VarType::INT, {temp, expr});
 
     return temp;
 }
@@ -421,7 +461,7 @@ antlrcpp::Any CodeGenVisitor::visitPostIncrementExpression(ifccParser::PostIncre
         exit(1);
     }
 
-    cfg->current_bb->add_IRInstr(IRInstr::incr, VarType::INT, {varName});
+    currentCfg->current_bb->add_IRInstr(IRInstr::incr, VarType::INT, {varName});
     return 0;
 }
 
@@ -438,7 +478,7 @@ antlrcpp::Any CodeGenVisitor::visitPostDecrementExpression(ifccParser::PostDecre
         exit(1);
     }
 
-    cfg->current_bb->add_IRInstr(IRInstr::decr, VarType::INT, {varName});
+    currentCfg->current_bb->add_IRInstr(IRInstr::decr, VarType::INT, {varName});
     return 0;
 }
 
@@ -446,8 +486,8 @@ antlrcpp::Any CodeGenVisitor::visitArrayAccessExpression(ifccParser::ArrayAccess
 {
     std::string varName = ctx->VAR()->getText();
     string pos = any_cast<string>(this->visit(ctx->expr()));
-    string temp = cfg->currentScope->addTempVariable("int");
-    cfg->current_bb->add_IRInstr(IRInstr::getTblx, VarType::INT, {temp, varName, pos});
+    string temp = currentCfg->currentScope->addTempVariable("int");
+    currentCfg->current_bb->add_IRInstr(IRInstr::getTblx, VarType::INT, {temp, varName, pos});
     return temp;
 }
 
@@ -467,30 +507,25 @@ antlrcpp::Any CodeGenVisitor::visitFunctionCallExpression(ifccParser::FunctionCa
     }
 
     // Evaluate each argument and move the result into the appropriate register.
-    // According to the Linux System V AMD64 ABI, the first six integer arguments go in:
-    // 1st: %rdi, 2nd: %rsi, 3rd: %rdx, 4th: %rcx, 5th: %r8, 6th: %r9.
-    // Here we assume that the result of an expression is left in %eax, so we move
-    // that 32-bit value into the corresponding register (using the "d" suffix for the lower 32 bits).
-
-    std::vector<std::string> argRegs = {"%edi", "%esi", "%edx", "%ecx", "%r8d", "%r9d"};
+    vector<std::string> argsExpr = vector<std::string>();
+    for (size_t i = 0; i < args.size(); i++)
+    {
+        argsExpr.push_back(any_cast<std::string>(this->visit(args[i])));
+    }
 
     for (size_t i = 0; i < args.size(); i++)
     {
-        std::string arg = any_cast<std::string>(this->visit(args[i]));
-        Symbol *argSymbol = findVariable(arg);
-
-        cfg->current_bb->add_IRInstr(IRInstr::copy, VarType::INT, {argRegs[i], arg});
-
-        if (argSymbol->isConstant()) {
-            freeLastTempVariable(1);
-        }
+        std::string arg = argsExpr[i];
+        currentCfg->current_bb->add_IRInstr(IRInstr::copy, VarType::INT, {argRegs[i], arg});
     }
 
+
+
     // The result of the function call is left in %eax
-    string temp = cfg->currentScope->addTempVariable("int");
+    string temp = currentCfg->currentScope->addTempVariable("int");
 
     // Call the function, and indicate the destination of the return value
-    cfg->current_bb->add_IRInstr(IRInstr::call, VarType::INT, {funcName, temp});
+    currentCfg->current_bb->add_IRInstr(IRInstr::call, VarType::INT, {funcName, temp});
 
     return temp;
 }
@@ -501,7 +536,7 @@ antlrcpp::Any CodeGenVisitor::visitLogiqueParesseuxExpression(ifccParser::Logiqu
     // expr op=('&&'|'||') expr
     string left = any_cast<string>(this->visit(ctx->expr(0)));
     string right = any_cast<string>(this->visit(ctx->expr(1)));
-    string temp = cfg->currentScope->addTempVariable("int");
+    string temp = currentCfg->currentScope->addTempVariable("int");
     string op = ctx->op->getText();
     IRInstr::Operation logOp;
 
@@ -520,7 +555,7 @@ antlrcpp::Any CodeGenVisitor::visitLogiqueParesseuxExpression(ifccParser::Logiqu
         return constOpt;
     }
 
-    cfg->current_bb->add_IRInstr(logOp, VarType::INT, {temp, left, right});
+    currentCfg->current_bb->add_IRInstr(logOp, VarType::INT, {temp, left, right});
 
     return temp;
 }
@@ -532,83 +567,83 @@ antlrcpp::Any CodeGenVisitor::visitIf_stmt(ifccParser::If_stmtContext *ctx)
     // Évalue la condition
     std::string cond = any_cast<std::string>(visit(ctx->expr()));
 
-    BasicBlock *tmp = cfg->current_bb->exit_true;
+    BasicBlock *tmp = currentCfg->current_bb->exit_true;
     // Crée un nouveau bloc pour la suite (join)
-    std::string joinLabel = cfg->new_BB_name();
-    BasicBlock *join_bb = new BasicBlock(cfg, joinLabel);
-    cfg->add_bb(join_bb);
+    std::string joinLabel = currentCfg->new_BB_name();
+    BasicBlock *join_bb = new BasicBlock(currentCfg, joinLabel);
+    currentCfg->add_bb(join_bb);
 
-    BasicBlock *current = cfg->current_bb;
+    BasicBlock *current = currentCfg->current_bb;
     current->test_var_name = cond;
 
     // Création des blocs then et else
-    std::string thenLabel = cfg->new_BB_name();
-    BasicBlock *then_bb = new BasicBlock(cfg, thenLabel);
-    cfg->add_bb(then_bb);
+    std::string thenLabel = currentCfg->new_BB_name();
+    BasicBlock *then_bb = new BasicBlock(currentCfg, thenLabel);
+    currentCfg->add_bb(then_bb);
 
     // Crée le bloc pour la branche "else"
     BasicBlock *else_bb = join_bb;
     if (hasElseStmt)
     {
-        std::string elseLabel = cfg->new_BB_name();
-        else_bb = new BasicBlock(cfg, elseLabel);
-        cfg->add_bb(else_bb);
+        std::string elseLabel = currentCfg->new_BB_name();
+        else_bb = new BasicBlock(currentCfg, elseLabel);
+        currentCfg->add_bb(else_bb);
         else_bb->exit_true = join_bb;
     }
 
     // Connecter les blocs
     join_bb->exit_true = tmp;
     then_bb->exit_true = join_bb;
-    cfg->current_bb->exit_true = then_bb;
-    cfg->current_bb->exit_false = else_bb;
+    currentCfg->current_bb->exit_true = then_bb;
+    currentCfg->current_bb->exit_false = else_bb;
 
     // Configure le bloc courant pour effectuer un saut conditionnel
-    cfg->current_bb->test_var_name = cond;
-    cfg->current_bb->test_var_register = cfg->IR_reg_to_asm(cond);
+    currentCfg->current_bb->test_var_name = cond;
+    currentCfg->current_bb->test_var_register = currentCfg->IR_reg_to_asm(cond);
 
     // Génère la branche "then"
-    cfg->current_bb = then_bb;
+    currentCfg->current_bb = then_bb;
     this->visit(ctx->stmt(0));
     // then_bb->add_IRInstr(IRInstr::jmp, VarType::INT, {joinLabel});
 
     // Génère la branche "else"
     if (hasElseStmt)
     {
-        cfg->current_bb = else_bb;
+        currentCfg->current_bb = else_bb;
         this->visit(ctx->stmt(1));
         // else_bb->add_IRInstr(IRInstr::jmp, VarType::INT, {joinLabel});
     }
 
     // Le code après le if se trouve dans join_bb
-    cfg->current_bb = join_bb;
+    currentCfg->current_bb = join_bb;
     return 0;
 }
 
 antlrcpp::Any CodeGenVisitor::visitWhile_stmt(ifccParser::While_stmtContext *ctx)
 {
     // Crée un bloc pour évaluer la condition
-    std::string condLabel = cfg->new_BB_name();
-    BasicBlock *cond_bb = new BasicBlock(cfg, "cond" + condLabel);
-    cfg->add_bb(cond_bb);
-    cfg->current_bb->exit_true = cond_bb;
+    std::string condLabel = currentCfg->new_BB_name();
+    BasicBlock *cond_bb = new BasicBlock(currentCfg, "cond" + condLabel);
+    currentCfg->add_bb(cond_bb);
+    currentCfg->current_bb->exit_true = cond_bb;
     // cfg->current_bb->add_IRInstr(IRInstr::jmp, VarType::INT, {condLabel}); // Ajoute un saut du bloc courant vers le
     // bloc de condition
 
     // Génère le bloc de condition
-    cfg->current_bb = cond_bb;
+    currentCfg->current_bb = cond_bb;
     std::string cond = any_cast<std::string>(this->visit(ctx->expr()));
     cond_bb->test_var_name = cond;
-    cond_bb->test_var_register = cfg->IR_reg_to_asm(cond);
+    cond_bb->test_var_register = currentCfg->IR_reg_to_asm(cond);
 
     // Crée le bloc du corps de la boucle
-    std::string bodyLabel = cfg->new_BB_name();
-    BasicBlock *body_bb = new BasicBlock(cfg, "body" + bodyLabel);
-    cfg->add_bb(body_bb);
+    std::string bodyLabel = currentCfg->new_BB_name();
+    BasicBlock *body_bb = new BasicBlock(currentCfg, "body" + bodyLabel);
+    currentCfg->add_bb(body_bb);
 
     // Crée le bloc de sortie (après la boucle)
-    std::string joinLabel = cfg->new_BB_name();
-    BasicBlock *join_bb = new BasicBlock(cfg, "join" + joinLabel);
-    cfg->add_bb(join_bb);
+    std::string joinLabel = currentCfg->new_BB_name();
+    BasicBlock *join_bb = new BasicBlock(currentCfg, "join" + joinLabel);
+    currentCfg->add_bb(join_bb);
 
     // La condition détermine le chemin
     cond_bb->exit_true = body_bb;
@@ -616,11 +651,11 @@ antlrcpp::Any CodeGenVisitor::visitWhile_stmt(ifccParser::While_stmtContext *ctx
     body_bb->exit_true = cond_bb;
 
     // Génère le corps de la boucle
-    cfg->current_bb = body_bb;
+    currentCfg->current_bb = body_bb;
     this->visit(ctx->stmt());
 
     // La suite du code se trouve dans join_bb
-    cfg->current_bb = join_bb;
+    currentCfg->current_bb = join_bb;
     return 0;
 }
 
@@ -732,18 +767,18 @@ int CodeGenVisitor::getConstantResultUnaryOp(int cstValue, IRInstr::Operation op
 // ==============================================================
 Symbol* CodeGenVisitor::findVariable(std::string varName)
 {
-    if (cfg == nullptr) {   // Si on est dans le contexte global
+    if (currentCfg == nullptr) {   // Si on est dans le contexte global
         return gvm->getGlobalScope()->findVariable(varName);
     } else {                // Si on est dans le contexte d'une fonction
-        return cfg->currentScope->findVariable(varName);
+        return currentCfg->currentScope->findVariable(varName);
     }
 }
 
 void CodeGenVisitor::freeLastTempVariable(int nbVar = 1)
 {
     for (int i = 0; i < nbVar; i++) {
-        if (cfg != nullptr) {
-            cfg->currentScope->freeLastTempVariable();
+        if (currentCfg != nullptr) {
+            currentCfg->currentScope->freeLastTempVariable();
         } else {
             gvm->getGlobalScope()->freeLastTempVariable();
         }
@@ -752,8 +787,8 @@ void CodeGenVisitor::freeLastTempVariable(int nbVar = 1)
 
 std::string CodeGenVisitor::addTempConstVariable(std::string type, int value)
 {
-    if (cfg != nullptr) {
-        return cfg->currentScope->addTempConstVariable(type, value);
+    if (currentCfg != nullptr) {
+        return currentCfg->currentScope->addTempConstVariable(type, value);
     } else {
         return gvm->addTempConstVariable(type, value);
     }
@@ -762,14 +797,25 @@ std::string CodeGenVisitor::addTempConstVariable(std::string type, int value)
 void CodeGenVisitor::enterNewScope()
 {
     // Creer un nouveau scope quand on entre un nouveau block
-    SymbolTable *parentScope = cfg->currentScope;
-    cfg->currentScope = new SymbolTable(parentScope->getCurrentDeclOffset());
-    cfg->currentScope->setParent(parentScope);
+    SymbolTable *parentScope = currentCfg->currentScope;
+    currentCfg->currentScope = new SymbolTable(parentScope->getCurrentDeclOffset());
+    currentCfg->currentScope->setParent(parentScope);
 }
 
 void CodeGenVisitor::exitCurrentScope()
 {
     // le block est finis, on synchronize le parent et ce scope; on revient vers scope de parent
-    cfg->currentScope->getParent()->synchronize(cfg->currentScope);
-    cfg->currentScope = cfg->currentScope->getParent();
+    currentCfg->currentScope->getParent()->synchronize(currentCfg->currentScope);
+    currentCfg->currentScope = currentCfg->currentScope->getParent();
+}
+
+void CodeGenVisitor::gen_asm(ostream &os)
+{
+    gvm->gen_asm(os);
+    os << "\n//================================================ \n\n";
+    for (auto &cfg : cfgs)
+    {
+        cfg->gen_asm(os);
+        os << "\n//================================================= \n\n";
+    }
 }
