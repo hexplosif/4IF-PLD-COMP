@@ -2,20 +2,28 @@
 
 #include "antlr4-runtime.h"
 #include "generated/ifccBaseVisitor.h"
+#include "IR.h"
 
 class CodeGenVisitor : public ifccBaseVisitor {
+private:
+    GVM* gvm; // Global Variable Manager
+
+    void enterNewScope();
+    void exitCurrentScope();
+
 public:
     //================================ Program ===============================
     virtual antlrcpp::Any visitProg(ifccParser::ProgContext *ctx) override;
     virtual antlrcpp::Any visitBlock(ifccParser::BlockContext *ctx) override;
-    virtual antlrcpp::Any visitFunctionCallExpression(ifccParser::FunctionCallExpressionContext *ctx) override;
 
     //=============================== Statements ===============================
-    virtual antlrcpp::Any visitDeclarationStatement(ifccParser::DeclarationStatementContext *ctx) override;
+    virtual antlrcpp::Any visitDecl_stmt(ifccParser::Decl_stmtContext *ctx) override;
+    virtual antlrcpp::Any visitSub_declWithType(ifccParser::Sub_declContext *ctx, std::string varType);
     virtual antlrcpp::Any visitAssignmentStatement(ifccParser::AssignmentStatementContext *ctx) override;
     virtual antlrcpp::Any visitReturn_stmt(ifccParser::Return_stmtContext *ctx) override;
-    virtual antlrcpp::Any visitIfStatement(ifccParser::IfStatementContext *ctx) override;
-    virtual antlrcpp::Any visitWhileStatement(ifccParser::WhileStatementContext *ctx) override;
+    virtual antlrcpp::Any visitBlockStatement(ifccParser::BlockStatementContext *ctx) override;
+    virtual antlrcpp::Any visitIf_stmt(ifccParser::If_stmtContext *ctx) override;
+    virtual antlrcpp::Any visitWhile_stmt(ifccParser::While_stmtContext *ctx) override;
 
     // =============================== Expressions ===============================
     virtual antlrcpp::Any visitAddSubExpression(ifccParser::AddSubExpressionContext *ctx) override;
@@ -31,4 +39,5 @@ public:
     virtual antlrcpp::Any visitPostIncrementExpression(ifccParser::PostIncrementExpressionContext *ctx) override;
     virtual antlrcpp::Any visitPostDecrementExpression(ifccParser::PostDecrementExpressionContext *ctx) override;
     virtual antlrcpp::Any visitArrayAccessExpression(ifccParser::ArrayAccessExpressionContext *ctx) override;
+    virtual antlrcpp::Any visitFunctionCallExpression(ifccParser::FunctionCallExpressionContext *ctx) override;
 };
