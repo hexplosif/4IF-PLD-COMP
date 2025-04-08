@@ -191,6 +191,7 @@ antlrcpp::Any CodeGenVisitor::visitAssignmentStatement(ifccParser::AssignmentSta
             cfg->current_bb->add_IRInstr(IRInstr::mod, VarType::INT, {varName, varName, exprResult});
         }
     }
+
     return 0;
 }
 

@@ -40,6 +40,8 @@ expr
     | VAR '[' expr ']'                              # ArrayAccessExpression
     | CONST                                         # ConstantExpression
     | CONST_CHAR                                    # ConstantCharExpression
+    | VAR '++'                                      # PostIncrementExpression
+    | VAR '--'                                      # PostDecrementExpression
     ;
 
 type : 'int' | 'char' ;
