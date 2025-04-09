@@ -6,6 +6,12 @@ using namespace std;
 
 #ifdef __arm__
 
+// For ARM32, up to four arguments to a function are passed in registers. 
+// r0 through r3 are used to pass the arguments and the call return address is stored in the link register.
+vector<string> argRegs = {"r0", "r1", "r2", "r3"};
+vector<string> tempRegs = {"r0", "r1", "r2", "r3", "r4"}; // Temporary registers
+string returnReg = "r0"; // Register used for return value
+
 void IRInstr::gen_asm(std::ostream &o)
 {
     static int labelCounter = 0;

@@ -7,12 +7,6 @@
 #include "IR.h"
 #include <vector>
 
-// According to the Linux System V AMD64 ABI, the first six integer arguments go in:
-// 1st: %rdi, 2nd: %rsi, 3rd: %rdx, 4th: %rcx, 5th: %r8, 6th: %r9.
-// Here we assume that the result of an expression is left in %eax, so we move
-// that 32-bit value into the corresponding register (using the "d" suffix for the lower 32 bits).
-static std::vector<std::string> argRegs = {"%edi", "%esi", "%edx", "%ecx", "%r8d", "%r9d"};
-
 class CodeGenVisitor : public ifccBaseVisitor {
 private:
     GVM* gvm; // Global Variable Manager

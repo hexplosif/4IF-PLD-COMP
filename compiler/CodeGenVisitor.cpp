@@ -11,7 +11,10 @@ using namespace std;
  * En pratique, vous pouvez encapsuler cela dans une classe plus élaborée.
  */
 
-extern std::map<std::string, DefFonction*> predefinedFunctions; /**< map of all functions in the program */
+extern map<string, DefFonction*> predefinedFunctions; /**< map of all functions in the program */
+extern vector<string> argRegs;
+extern vector<string> tempRegs;
+extern string returnReg;
 
 antlrcpp::Any CodeGenVisitor::visitProg(ifccParser::ProgContext *ctx)
 {
@@ -48,9 +51,9 @@ antlrcpp::Any CodeGenVisitor::visitFunction_definition(ifccParser::Function_defi
     if (ctx->parameterList())
     {
         int paramsSize = (ctx->parameterList()->parameter()).size();
-        if (paramsSize > 6)
+        if (paramsSize > argRegs.size())
         {
-            std::cerr << "error: function with more than 6 params is not supported! " << "\n";
+            std::cerr << "error: function with more than " << argRegs.size() << " params is not supported! " << "\n";
             exit(1);
         }
 
@@ -231,13 +234,13 @@ antlrcpp::Any CodeGenVisitor::visitAssignmentStatement(ifccParser::AssignmentSta
         }
         else if (op == "/=")
         {
-            currentCfg->current_bb->add_IRInstr(IRInstr::copy, type, {"%esi", exprResult});
-            currentCfg->current_bb->add_IRInstr(IRInstr::divTblx, type, {varName, "%esi", pos});
+            currentCfg->current_bb->add_IRInstr(IRInstr::copy, type, {tempRegs[4], exprResult});
+            currentCfg->current_bb->add_IRInstr(IRInstr::divTblx, type, {varName, tempRegs[4], pos});
         }
         else if (op == "%=")
         {
-            currentCfg->current_bb->add_IRInstr(IRInstr::copy, type, {"%esi", exprResult});
-            currentCfg->current_bb->add_IRInstr(IRInstr::modTblx, type, {varName, "%esi", pos});
+            currentCfg->current_bb->add_IRInstr(IRInstr::copy, type, {tempRegs[4], exprResult});
+            currentCfg->current_bb->add_IRInstr(IRInstr::modTblx, type, {varName, tempRegs[4], pos});
         }
 
         if (exprSymbol->isConstant()) {
@@ -272,13 +275,13 @@ antlrcpp::Any CodeGenVisitor::visitAssignmentStatement(ifccParser::AssignmentSta
         }
         else if (op == "/=")
         {
-            currentCfg->current_bb->add_IRInstr(IRInstr::copy, type, {"%ecx", exprResult});
-            currentCfg->current_bb->add_IRInstr(IRInstr::div, type, {varName, varName, "%ecx"});
+            currentCfg->current_bb->add_IRInstr(IRInstr::copy, type, {tempRegs[2], exprResult});
+            currentCfg->current_bb->add_IRInstr(IRInstr::div, type, {varName, varName, tempRegs[2]});
         }
         else if (op == "%=")
         {
-            currentCfg->current_bb->add_IRInstr(IRInstr::copy, type, {"%ecx", exprResult});
-            currentCfg->current_bb->add_IRInstr(IRInstr::mod, type, {varName, varName, "%ecx"});
+            currentCfg->current_bb->add_IRInstr(IRInstr::copy, type, {tempRegs[2], exprResult});
+            currentCfg->current_bb->add_IRInstr(IRInstr::mod, type, {varName, varName, tempRegs[2]});
         }
 
         if (exprSymbol->isConstant()) {
@@ -317,7 +320,7 @@ antlrcpp::Any CodeGenVisitor::visitReturn_stmt(ifccParser::Return_stmtContext *c
         exit(1);
     }
 
-    currentCfg->current_bb->add_IRInstr(IRInstr::copy, funcReturnType, {"%eax", exprResult});
+    currentCfg->current_bb->add_IRInstr(IRInstr::copy, funcReturnType, {returnReg, exprResult});
 
     if (exprSymbol->isConstant()) {
         freeLastTempVariable(1);
@@ -388,8 +391,8 @@ antlrcpp::Any CodeGenVisitor::visitMulDivExpression(ifccParser::MulDivExpression
     string tmp = currentCfg->currentScope->addTempVariable(type);
     if (op == IRInstr::Operation::div || op == IRInstr::Operation::mod)
     {
-        currentCfg->current_bb->add_IRInstr(IRInstr::copy, type, {"%ecx", right});
-        currentCfg->current_bb->add_IRInstr(op, type, {tmp, left, "%ecx"});
+        currentCfg->current_bb->add_IRInstr(IRInstr::copy, type, {tempRegs[2], right});
+        currentCfg->current_bb->add_IRInstr(op, type, {tmp, left, tempRegs[2]});
     } else {
         currentCfg->current_bb->add_IRInstr(op, type, {tmp, left, right});
     }
@@ -590,9 +593,9 @@ antlrcpp::Any CodeGenVisitor::visitFunctionCallExpression(ifccParser::FunctionCa
 
     // Get the list of argument expressions
     auto args = ctx->expr();
-    if (args.size() > 6)
+    if (args.size() > argRegs.size())
     {
-        std::cerr << "Error: function call with more than 6 arguments not supported." << std::endl;
+        std::cerr << "Error: function call with more than " << argRegs.size() << " arguments not supported." << std::endl;
         exit(1);
     }
 
@@ -915,17 +918,6 @@ void CodeGenVisitor::exitCurrentScope()
     // le block est finis, on synchronize le parent et ce scope; on revient vers scope de parent
     currentCfg->currentScope->getParent()->synchronize(currentCfg->currentScope);
     currentCfg->currentScope = currentCfg->currentScope->getParent();
-}
-
-void CodeGenVisitor::gen_asm(ostream &os)
-{
-    gvm->gen_asm(os);
-    os << "\n//================================================ \n\n";
-    for (auto &cfg : cfgs)
-    {
-        cfg->gen_asm(os);
-        os << "\n//================================================= \n\n";
-    }
 }
 
 VarType CodeGenVisitor::getTypeExpr(string left, string right) {

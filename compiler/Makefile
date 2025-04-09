@@ -24,6 +24,7 @@ OBJECTS = build/ifccBaseVisitor.o \
 		  build/gen_asm_arm.o \
 		  build/gen_asm_msp430.o \
 		  build/gen_asm_x86.o \
+		  build/gen_asm_arm64.o \
 
 ifcc: $(OBJECTS)
 	@mkdir -p build

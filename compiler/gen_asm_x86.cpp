@@ -1,10 +1,20 @@
 #include <sstream>
+#include <vector>
 #include "IR.h"
+#include "CodeGenVisitor.h"
 using namespace std;
 
 // Génération de code assembleur pour l'instruction for x86 machine
 
 #ifdef __x86_64__
+
+// According to the Linux System V AMD64 ABI, the first six integer arguments go in:
+// 1st: %rdi, 2nd: %rsi, 3rd: %rdx, 4th: %rcx, 5th: %r8, 6th: %r9.
+// Here we assume that the result of an expression is left in %eax, so we move
+// that 32-bit value into the corresponding register (using the "d" suffix for the lower 32 bits).
+vector<string> argRegs = {"%edi", "%esi", "%edx", "%ecx", "%r8d", "%r9d"};
+vector<string> tempRegs = {"%eax", "%edx", "%ebx", "%ecx", "%esi", "%edi", "%e8d", "%e9d"}; // Temporary registers
+string returnReg = "%eax"; // Register used for return value
 
 void IRInstr::gen_asm(std::ostream &o)
 {
@@ -336,6 +346,38 @@ void BasicBlock::gen_asm(std::ostream &o)
 
 //* ---------------------- CFG ---------------------- */
 
+void BasicBlock::add_IRInstr(IRInstr::Operation op, VarType t, std::vector<std::string> params)
+{
+    // General case
+    bool needFindAdd = (op == IRInstr::Operation::call || op == IRInstr::Operation::jmp);
+    std::string p0 = needFindAdd ? params[0] : cfg->IR_reg_to_asm(params[0]);
+    std::string p1 = params.size() >= 2 ? cfg->IR_reg_to_asm(params[1]) : "";
+    std::string p2 = params.size() >= 3 ? cfg->IR_reg_to_asm(params[2]) : "";
+
+    // Tableau case
+    if (op == IRInstr::Operation::copyTblx || op == IRInstr::Operation::addTblx || op == IRInstr::Operation::subTblx ||
+        op == IRInstr::Operation::mulTblx || op == IRInstr::Operation::divTblx || op == IRInstr::Operation::modTblx)
+    {
+        Symbol *p = cfg->currentScope->findVariable(params[0]);
+        p0 = to_string(p->offset);
+    }
+
+    if (op == IRInstr::Operation::getTblx)
+    {
+        Symbol *p = cfg->currentScope->findVariable(params[1]);
+        p1 = to_string(p->offset);
+    }
+
+    std::vector<std::string> paramsRealAddr = {p0, p1, p2};
+
+    if (op == IRInstr::Operation::copy && CFG::isRegConstant(p1)) {
+        op = IRInstr::Operation::ldconst;
+    }
+
+    IRInstr *instr = new IRInstr(this, op, t, paramsRealAddr);
+    instrs.push_back(instr);
+}
+
 void CFG::gen_asm(std::ostream &o)
 {
     o << ".global " << ast->getName() << "\n";
@@ -415,6 +457,19 @@ void GVM::gen_asm(std::ostream &o)
     }
 
     o << "    .text\n";
+}
+
+// -------------------------- Code gen -------------------
+void CodeGenVisitor::gen_asm(ostream &os)
+{
+    gvm->gen_asm(os);
+    os << ".text\n";
+    os << "\n//================================================ \n\n";
+    for (auto &cfg : cfgs)
+    {
+        cfg->gen_asm(os);
+        os << "\n//================================================= \n\n";
+    }
 }
 
 #endif // __x86_64__

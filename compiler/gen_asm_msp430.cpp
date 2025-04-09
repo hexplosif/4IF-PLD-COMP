@@ -6,6 +6,13 @@ using namespace std;
 
 #ifdef __MSP430__
 
+// For MSP430/430X, up to four arguments to a function are passed in registers. 
+// The number of arguments passed in registers depends on the size and type of each argument. Arguments are assigned, in declared order, to the first available register single, pair, or quad from the following list into which it fits (with the following special exceptions). 
+// For MSP430 and MSP430X, the argument registers are: R12, R13, R14, R15
+vector<string> argRegs = {"r12", "r13", "r14", "r15"};
+vector<string> tempRegs = {"r4", "r5", "r6", "r7", "r8", "r9", "r10", "r11"}; // Temporary registers
+string returnReg = "r12"; // Register used for return value
+
 void IRInstr::gen_asm(std::ostream &o)
 {
     static int labelCounter = 0;
