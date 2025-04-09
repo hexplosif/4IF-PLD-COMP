@@ -4,7 +4,10 @@
 enum VarType {
     VOID,
     INT,
-    CHAR
+    CHAR,
+
+    INT_PTR, //TODO: j'ai ajouté ça pour les tableaux, mais j'ai rien fait, il faut que qui est responsable pour le pointer le fasse
+    CHAR_PTR,
 };
 
 enum ScopeType {
@@ -47,6 +50,8 @@ class Symbol
             if (strType == "int") return VarType::INT;
             if (strType == "char") return VarType::CHAR;
             if (strType == "void") return VarType::VOID;
+            if (strType == "int*") return VarType::INT_PTR;
+            if (strType == "char*") return VarType::CHAR_PTR;
             std::cerr << "error: unknown type " << strType << std::endl;
             exit(1);
         }
@@ -56,6 +61,8 @@ class Symbol
                 case VarType::INT: return "int";
                 case VarType::CHAR: return "char";
                 case VarType::VOID: return "void";
+                case VarType::INT_PTR: return "int*";
+                case VarType::CHAR_PTR: return "char*";
                 default: return "unknown";
             }
         }

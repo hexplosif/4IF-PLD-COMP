@@ -128,9 +128,9 @@ antlrcpp::Any CodeGenVisitor::visitSub_declWithType(ifccParser::Sub_declContext 
     {
         gvm->addGlobalVariable(varName, type);
 
-        if (ctx->expr())
+        if (ctx->expr(0))
         {
-            string exprCst = any_cast<string>(visit(ctx->expr()));
+            string exprCst = any_cast<string>(visit(ctx->expr(0)));
             Symbol *exprCstSymbol = findVariable(exprCst);
 
             if (!exprCstSymbol->isConstant()) {
@@ -148,28 +148,56 @@ antlrcpp::Any CodeGenVisitor::visitSub_declWithType(ifccParser::Sub_declContext 
     }
     else
     {
-        if (ctx->CONST(0) != nullptr) { // C'est un tableaux
-            int size = std::stoi(ctx->CONST(0)->getText());
-            currentCfg->currentScope->addLocalVariable(varName, type, size); 
-            int i = 1;
-            while(ctx->CONST(i)) {
+        if (ctx->CONST_STRING() != nullptr) { // C'est une chaîne de caractères
+            int size = std::stoi(ctx->CONST()->getText());
+
+            if (type != VarType::CHAR) {
+                std::cerr << "error: variable " << varName << " must be of type char*.\n";
+                exit(1);
+            }
+
+            string valueWithQuote = ctx->CONST_STRING()->getText();
+            string value = valueWithQuote.substr(1, valueWithQuote.length() - 2); // Enlève les guillemets
+            int stringSize = value.length() + 1; // +1 pour le caractère terminateur '\0'
+
+            if (stringSize > size + 1) {
+                std::cerr << "error: string literal is too long for variable " << varName << ".\n";
+                exit(1);
+            }
+
+            currentCfg->currentScope->addLocalVariable(varName, VarType::CHAR_PTR, size);
+            for (int i = 0; i < size; i++)
+            {
+                string tempChar = currentCfg->currentScope->addTempConstVariable(VarType::CHAR, (int)value[i]);
+                string tempPos = currentCfg->currentScope->addTempConstVariable(VarType::INT, i);
+                currentCfg->current_bb->add_IRInstr(IRInstr::copyTblx, VarType::CHAR_PTR, {varName, tempChar, tempPos});
+            }
+
+
+        } else if (ctx->CONST() != nullptr) { // C'est un tableaux
+            int size = std::stoi(ctx->CONST()->getText());
+            VarType ptrType = (type == VarType::INT) ? VarType::INT_PTR : VarType::CHAR_PTR; //TODO: ameliorer celui ligne
+            currentCfg->currentScope->addLocalVariable(varName, ptrType, size); 
+            int i = 0;
+            while(ctx->expr(i)) {
                 if (i > size) {
                     std::cerr << "error: too many initializers for variable " << varName << ".\n";
                     exit(1);
                 }
 
-                string tempPos = currentCfg->currentScope->addTempConstVariable(VarType::INT, i-1);
-                int value = std::stoi(ctx->CONST(i)->getText());
-                string tempValue = addTempConstVariable(VarType::INT, value);
-                currentCfg->current_bb->add_IRInstr(IRInstr::copyTblx, type, {varName, tempValue, tempPos});
+                string tempPos = currentCfg->currentScope->addTempConstVariable(VarType::INT, i);
+                // int value = std::stoi(ctx->CONST(i)->getText());
+                // string tempValue = addTempConstVariable(VarType::INT, value);
+                string tempValue = any_cast<string>(visit(ctx->expr(i)));
+                currentCfg->current_bb->add_IRInstr(IRInstr::copyTblx, ptrType, {varName, tempValue, tempPos});
                 i++;
             }
         }
         else
         {
             currentCfg->currentScope->addLocalVariable(varName, type);
-            if (ctx->expr()) {
-                string expr = any_cast<string>(visit(ctx->expr()));
+            if (ctx->expr(0)) {
+                string expr = any_cast<string>(visit(ctx->expr(0)));
                 Symbol *exprSymbol = findVariable(expr);
                 
                 if (!SymbolTable::isTypeCompatible(exprSymbol->type, type)) {
@@ -416,6 +444,24 @@ antlrcpp::Any CodeGenVisitor::visitConstantCharExpression(ifccParser::ConstantCh
     return temp;
 }
 
+antlrcpp::Any CodeGenVisitor::visitConstantStringExpression(ifccParser::ConstantStringExpressionContext *ctx)
+{
+    // Traitement des constantes de type string (par exemple, "abc")
+    string valueWithQuote = ctx->CONST_STRING()->getText();
+    string value = valueWithQuote.substr(1, valueWithQuote.length() - 2); // Enlève les guillemets
+    int size = value.length() + 1; // +1 pour le caractère terminateur '\0'
+
+    // Crée une variable temporaire et charge la constante dedans.
+    string temp = currentCfg->currentScope->addTempVariable(VarType::CHAR_PTR, size);
+    for (int i = 0; i < size; i++)
+    {
+        string tempChar = currentCfg->currentScope->addTempConstVariable(VarType::CHAR, (int)value[i]);
+        string tempPos = currentCfg->currentScope->addTempConstVariable(VarType::INT, i);
+        currentCfg->current_bb->add_IRInstr(IRInstr::copyTblx, VarType::CHAR_PTR, {temp, tempChar, tempPos});
+    }
+    return temp;
+}
+
 antlrcpp::Any CodeGenVisitor::visitVariableExpression(ifccParser::VariableExpressionContext *ctx)
 {
     // On retourne simplement le nom de la variable.
@@ -566,6 +612,16 @@ antlrcpp::Any CodeGenVisitor::visitArrayAccessExpression(ifccParser::ArrayAccess
 {
     std::string varName = ctx->VAR()->getText();
     Symbol *var = findVariable(varName);
+    if (var == nullptr) {
+        std::cerr << "error: variable " << varName << " not declared.\n";
+        exit(1);
+    }
+
+    VarType type = var->type;
+    if (type != VarType::INT_PTR && type != VarType::CHAR_PTR) {
+        std::cerr << "error: variable " << varName << " is not an array.\n";
+        exit(1);
+    }
 
     string pos = any_cast<string>(this->visit(ctx->expr()));
     Symbol *posSymbol = findVariable(pos);
@@ -574,8 +630,8 @@ antlrcpp::Any CodeGenVisitor::visitArrayAccessExpression(ifccParser::ArrayAccess
         exit(1);
     }
     
-    VarType type = var->type;
-    string temp = currentCfg->currentScope->addTempVariable(type);
+    VarType tempType = (type == VarType::INT_PTR) ? VarType::INT : VarType::CHAR; //TODO: ameliorer celui ligne
+    string temp = currentCfg->currentScope->addTempVariable(tempType);
     currentCfg->current_bb->add_IRInstr(IRInstr::getTblx, type, {temp, varName, pos});
     return temp;
 }

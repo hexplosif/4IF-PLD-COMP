@@ -34,7 +34,12 @@ Symbol SymbolTable::addGlobalVariable(std::string name, VarType type) {
     }
 }
 
-std::string SymbolTable::addTempVariable(VarType type) {
+std::string SymbolTable::addTempVariable(VarType type, int size) {
+    if (size > 0) {
+        currentDeclOffset += size * 4;
+    } else {
+        currentDeclOffset += 4;
+    }
     currentDeclOffset += 4;
     std::string name = "!tmp" + std::to_string(currentDeclOffset);
     Symbol p = { type, currentDeclOffset, ScopeType::BLOCK };
