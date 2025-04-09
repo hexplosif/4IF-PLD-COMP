@@ -16,7 +16,7 @@ class SymbolTable
 
         Symbol addLocalVariable(std::string name, VarType type, int size = -1); //return offset
         Symbol addGlobalVariable(std::string name, VarType type);
-        std::string addTempVariable(VarType type); //return name
+        std::string addTempVariable(VarType type, int size = -1); //return name
         std::string addTempConstVariable(VarType type, int value); //return name
 
         void freeLastTempVariable(); // free last temp variable

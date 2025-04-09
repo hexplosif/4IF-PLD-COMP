@@ -29,7 +29,7 @@ stmt
 
 
 decl_stmt : type sub_decl (',' sub_decl)* ';' ;         // Déclaration avec ou sans affectation
-sub_decl : (VAR ('=' expr)?) | (VAR '[' CONST ']' ('=' '{' CONST(',' CONST)* '}' )?);         // Sub-règle pour les déclarations
+sub_decl : (VAR ('=' expr)?) | (VAR '[' CONST ']' ('=' ('{' expr(',' expr)* '}' | CONST_STRING) )?);         // Sub-règle pour les déclarations
 assign_stmt : (VAR | VAR '[' expr ']') op_assign expr ';';                   // Affectation
 op_assign: '=' | '+=' | '-=' | '*=' | '/=' | '%=';
 return_stmt : 'return' (expr)? ';' ;                       // On retourne une expression
@@ -53,6 +53,7 @@ expr
     | VAR '[' expr ']'                              # ArrayAccessExpression
     | CONST                                         # ConstantExpression
     | CONST_CHAR                                    # ConstantCharExpression
+    | CONST_STRING                                  # ConstantStringExpression
     | VAR '++'                                      # PostIncrementExpression
     | VAR '--'                                      # PostDecrementExpression
     ;
@@ -61,7 +62,8 @@ type : 'int' | 'char' ;
 
 VAR   : [a-zA-Z_][a-zA-Z_0-9]* ;  // Identifiants pour les variables
 CONST : [0-9]+ ;                 // Constantes entières
-CONST_CHAR : '\''[ -~]'\'' ;
+CONST_CHAR : '\'' [ -~] '\'' ;
+CONST_STRING : '"' ([ -~])*? '"' ;
 
 OPM: '*' | '/' | '%' ; // Opérateurs multiplicatifs 
 
