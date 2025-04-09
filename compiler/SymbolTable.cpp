@@ -1,5 +1,6 @@
 #include "SymbolTable.h"
 #include <iomanip>
+#include <array>
 
 SymbolTable::SymbolTable( int initialOffset ) {
     table = std::map<std::string, Symbol>();
