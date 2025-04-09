@@ -1,5 +1,6 @@
 #include "CodeGenVisitor.h"
 #include "IR.h"
+#include "FeedbackStyleOutput.h"
 #include <cstdlib>
 #include <iostream>
 #include <sstream>
@@ -100,6 +101,8 @@ antlrcpp::Any CodeGenVisitor::visitBlock(ifccParser::BlockContext *ctx)
         //     break; // Un return a été rencontré : on arrête le traitement du bloc.
         this->visit(stmt);
     }
+
+    currentCfg->currentScope->checkUnusedVariables();
     return 0;
 }
 
@@ -195,10 +198,11 @@ antlrcpp::Any CodeGenVisitor::visitAssignmentStatement(ifccParser::AssignmentSta
     auto assign = ctx->assign_stmt();
 
     string varName = assign->VAR()->getText();
+
     Symbol *var = findVariable(varName);
     VarType type = var->type;
     if (var == nullptr) {
-        std::cerr << "error: variable " << varName << " not declared.\n";
+        FeedbackOutputFormat::showFeedbackOutput("error", "variable '" + varName + "' not declared");
         exit(1);
     }
 
@@ -424,10 +428,11 @@ antlrcpp::Any CodeGenVisitor::visitVariableExpression(ifccParser::VariableExpres
 
     if (var == nullptr)
     {
-        std::cerr << "error: variable " << varName << " not declared\n";
+        FeedbackOutputFormat::showFeedbackOutput("error", "variable '" + varName + "' not declared");
         exit(1);
     }
 
+    var->markUsed();
     return varName;
 }
 
@@ -595,7 +600,7 @@ antlrcpp::Any CodeGenVisitor::visitFunctionCallExpression(ifccParser::FunctionCa
     auto args = ctx->expr();
     if (args.size() > argRegs.size())
     {
-        std::cerr << "Error: function call with more than " << argRegs.size() << " arguments not supported." << std::endl;
+        FeedbackOutputFormat::showFeedbackOutput("error", "function call with more than " + std::to_string(argRegs.size()) + " arguments not supported");
         exit(1);
     }
 
