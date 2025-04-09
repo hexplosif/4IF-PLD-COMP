@@ -1,5 +1,6 @@
 #include "SymbolTable.h"
 #include <iomanip>
+#include "FeedbackStyleOutput.h"
 
 SymbolTable::SymbolTable( int initialOffset ) {
     table = std::map<std::string, Symbol>();
@@ -18,7 +19,7 @@ Symbol SymbolTable::addLocalVariable(std::string name, std::string type, int siz
         table[name] = p;
         return p;
     } else {
-        std::cerr << "error: variable '" << name << "' has already declared\n";
+        FeedbackOutputFormat::showFeedbackOutput("error", "variable '" + name + "' has already declared");
         exit(1);
     }
 }
@@ -29,7 +30,7 @@ Symbol SymbolTable::addGlobalVariable(std::string name, std::string type) {
         table[name] = p; 
         return p;
     } else {
-        std::cerr << "error: variable '" << name << "' has already declared\n";
+        FeedbackOutputFormat::showFeedbackOutput("error", "variable '" + name + "' has already declared");
         exit(1);
     }
 }
@@ -79,14 +80,14 @@ bool SymbolTable::isGlobalScope() {
 VarType SymbolTable::getType( std::string strType ) {
     if (strType == "int") return VarType::INT;
     if (strType == "char") return VarType::CHAR;
-    std::cerr << "error: unknown type " << strType << std::endl;
+    FeedbackOutputFormat::showFeedbackOutput("error", "unknown type " + strType);
     exit(1);
 }
 
 void SymbolTable::printTable() {
-    std::cout << "================== Symbol Table ==================" << std::endl;
-    std::cout << "| Name       | Type   | Scope           | Offset |" << std::endl;
-    std::cout << "------------------------------------------------" << std::endl;
+    std::cout << "======================== Symbol Table ========================" << std::endl;
+    std::cout << "| Name       | Type   | Scope           | Offset | Is used?  |" << std::endl;
+    std::cout << "--------------------------------------------------------------" << std::endl;
     
     for (const auto& entry : table) {
         std::string varName = entry.first;
@@ -105,12 +106,24 @@ void SymbolTable::printTable() {
                   << " | " << std::setw(6) << std::left << typeStr
                   << " | " << std::setw(15) << std::left << scopeStr
                   << " | " << std::setw(6) << std::left << symbol.offset 
+                  << " | " << std::setw(9) << std:: left << symbol.isUsed()
                   << " |" << std::endl;
     }
     
-    std::cout << "================================================" << std::endl;
+    std::cout << "==============================================================" << std::endl;
 }
 
 bool SymbolTable::isTempVariable(std::string name) {
     return name.find("!tmp") != std::string::npos;
+}
+
+void SymbolTable::checkUnusedVariables() {
+    for (const auto& entry : table) {
+        std::string varName = entry.first;
+        Symbol symbol = entry.second;
+        
+        if (!isTempVariable(varName) && !symbol.isUsed()) {
+            FeedbackOutputFormat::showFeedbackOutput("warning", "variable '" + varName + "' is declared but not used");
+        }
+    }
 }

@@ -21,6 +21,10 @@ class Symbol
 
         bool isConstant() { return isCst; }
 
+        bool isUsed() { return used; }
+
+        void markUsed() { used = true; }
+
         int getCstValue() {    
             if (!isCst) {
                 std::cerr << "error: getValue() called on non-constant variable" << std::endl;
@@ -35,6 +39,7 @@ class Symbol
         
     private:
         bool isCst = false;
+        bool used = false;
         int value; // only for constant
 
 };

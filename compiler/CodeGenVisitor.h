@@ -7,11 +7,14 @@
 class CodeGenVisitor : public ifccBaseVisitor {
 private:
     GVM* gvm; // Global Variable Manager
+    CFGManager* cfgManager;
 
     void enterNewScope();
     void exitCurrentScope();
 
 public:
+    CodeGenVisitor(GVM* gvm, CFGManager* cfgManager) : gvm(gvm), cfgManager(cfgManager) { }
+
     //================================ Program ===============================
     virtual antlrcpp::Any visitProg(ifccParser::ProgContext *ctx) override;
     virtual antlrcpp::Any visitBlock(ifccParser::BlockContext *ctx) override;

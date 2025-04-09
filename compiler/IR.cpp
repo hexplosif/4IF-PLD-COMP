@@ -1,5 +1,6 @@
 #include "IR.h"
 #include "SymbolTable.h"
+#include "FeedbackStyleOutput.h"
 #include <cstdlib>
 #include <iostream>
 #include <sstream>
@@ -461,7 +462,7 @@ void GVM::setGlobalVariableValue(std::string name, int value)
     }
     else
     {
-        std::cerr << "error: variable '" << name << "' not declared\n";
+        FeedbackOutputFormat::showFeedbackOutput("error", "variable '" + name + "' not declared");
         exit(1);
     }
 }

@@ -33,6 +33,8 @@ class SymbolTable
 
         void printTable();
         static bool isTempVariable(std::string name);
+        
+        void checkUnusedVariables();
 
     private:
         std::map<std::string, Symbol> table;

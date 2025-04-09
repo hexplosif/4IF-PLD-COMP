@@ -1,5 +1,6 @@
 #include "CodeGenVisitor.h"
 #include "IR.h"
+#include "FeedbackStyleOutput.h"
 #include <cstdlib>
 #include <iostream>
 #include <sstream>
@@ -57,6 +58,8 @@ antlrcpp::Any CodeGenVisitor::visitBlock(ifccParser::BlockContext *ctx)
         //     break; // Un return a été rencontré : on arrête le traitement du bloc.
         this->visit(stmt);
     }
+
+    cfg->currentScope->checkUnusedVariables();
     return 0;
 }
 
@@ -127,7 +130,7 @@ antlrcpp::Any CodeGenVisitor::visitAssignmentStatement(ifccParser::AssignmentSta
     Symbol *var = cfg->currentScope->findVariable(varName);
     if (var == nullptr)
     {
-        std::cerr << "error: variable " << varName << " not declared.\n";
+        FeedbackOutputFormat::showFeedbackOutput("error", "variable '" + varName + "' not declared");
         exit(1);
     }
 
@@ -303,10 +306,11 @@ antlrcpp::Any CodeGenVisitor::visitVariableExpression(ifccParser::VariableExpres
     Symbol *var = cfg->currentScope->findVariable(varName);
     if (var == nullptr)
     {
-        std::cerr << "error: variable " << varName << " not declared\n";
+        FeedbackOutputFormat::showFeedbackOutput("error", "variable '" + varName + "' not declared");
         exit(1);
     }
 
+    var->markUsed();
     return varName;
 }
 
@@ -422,7 +426,7 @@ antlrcpp::Any CodeGenVisitor::visitFunctionCallExpression(ifccParser::FunctionCa
     // Check if the function call has more than 6 arguments.
     if (args.size() > 6)
     {
-        std::cerr << "Error: function call with more than 6 arguments not supported." << std::endl;
+        FeedbackOutputFormat::showFeedbackOutput("error", "function call with more than 6 arguments not supported");
         exit(1);
     }
 

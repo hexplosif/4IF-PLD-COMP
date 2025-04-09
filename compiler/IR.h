@@ -143,4 +143,13 @@ class GVM { // Global Variable Manager
         std::map<std::string, int> globalVariableValues; /**< the values of the global variables */
 };
 
+class CFGManager {
+    public:
+        CFGManager();
+        void addCFG(std::string functionName, CFG* cfg);
+
+    protected:
+        std::map<std::string, CFG*> cfgs;
+};
+
 #endif
