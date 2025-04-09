@@ -39,6 +39,8 @@ class SymbolTable
         static VarType getHigherType(VarType type1, VarType type2);
         static bool isTypeCompatible(VarType type1, VarType type2);
 
+        void checkUnusedVariables();
+
     private:
         std::map<std::string, Symbol> table;
         int currentDeclOffset = 0;

@@ -1,5 +1,6 @@
 #include "CodeGenVisitor.h"
 #include "IR.h"
+#include "FeedbackStyleOutput.h"
 #include <cstdlib>
 #include <iostream>
 #include <sstream>
@@ -53,7 +54,7 @@ antlrcpp::Any CodeGenVisitor::visitFunction_definition(ifccParser::Function_defi
         int paramsSize = (ctx->parameterList()->parameter()).size();
         if (paramsSize > argRegs.size())
         {
-            std::cerr << "error: function with more than " << argRegs.size() << " params is not supported! " << "\n";
+            FeedbackOutputFormat::showFeedbackOutput("error", "function with more than " + std::to_string(argRegs.size()) + " params is not supported!");
             exit(1);
         }
 
@@ -100,6 +101,8 @@ antlrcpp::Any CodeGenVisitor::visitBlock(ifccParser::BlockContext *ctx)
         //     break; // Un return a été rencontré : on arrête le traitement du bloc.
         this->visit(stmt);
     }
+
+    currentCfg->currentScope->checkUnusedVariables();
     return 0;
 }
 
@@ -134,12 +137,12 @@ antlrcpp::Any CodeGenVisitor::visitSub_declWithType(ifccParser::Sub_declContext 
             Symbol *exprCstSymbol = findVariable(exprCst);
 
             if (!exprCstSymbol->isConstant()) {
-                std::cerr << "error: global variable " << varName << " must be initialized with a constant expression.\n";
+                FeedbackOutputFormat::showFeedbackOutput("error", "global variable " + varName + " must be initialized with a constant expression.");
                 exit(1);
             }
 
             if (!SymbolTable::isTypeCompatible(exprCstSymbol->type, type)) {
-                std::cerr << "error: type mismatch for global variable " << varName << ". Expected " << varType << ", got " << Symbol::getTypeStr(exprCstSymbol->type) << ".\n";
+                FeedbackOutputFormat::showFeedbackOutput("error", "type mismatch for global variable " + varName + ". Expected " + varType + ", got " + Symbol::getTypeStr(exprCstSymbol->type));
                 exit(1);
             }
 
@@ -154,7 +157,7 @@ antlrcpp::Any CodeGenVisitor::visitSub_declWithType(ifccParser::Sub_declContext 
             int i = 1;
             while(ctx->CONST(i)) {
                 if (i > size) {
-                    std::cerr << "error: too many initializers for variable " << varName << ".\n";
+                    FeedbackOutputFormat::showFeedbackOutput("error", "too many initializers for variable " + varName);
                     exit(1);
                 }
 
@@ -173,7 +176,7 @@ antlrcpp::Any CodeGenVisitor::visitSub_declWithType(ifccParser::Sub_declContext 
                 Symbol *exprSymbol = findVariable(expr);
                 
                 if (!SymbolTable::isTypeCompatible(exprSymbol->type, type)) {
-                    std::cerr << "error: type mismatch for variable " << varName << ". Expected " << varType << ", got " << Symbol::getTypeStr(exprSymbol->type) << ".\n";
+                    FeedbackOutputFormat::showFeedbackOutput("error", "type mismatch for variable " + varName + ". Expected " + varType + ", got " + Symbol::getTypeStr(exprSymbol->type));
                     exit(1);
                 }
 
@@ -195,10 +198,11 @@ antlrcpp::Any CodeGenVisitor::visitAssignmentStatement(ifccParser::AssignmentSta
     auto assign = ctx->assign_stmt();
 
     string varName = assign->VAR()->getText();
+
     Symbol *var = findVariable(varName);
     VarType type = var->type;
     if (var == nullptr) {
-        std::cerr << "error: variable " << varName << " not declared.\n";
+        FeedbackOutputFormat::showFeedbackOutput("error", "variable '" + varName + "' not declared");
         exit(1);
     }
 
@@ -212,7 +216,7 @@ antlrcpp::Any CodeGenVisitor::visitAssignmentStatement(ifccParser::AssignmentSta
 
         Symbol *exprSymbol = findVariable(exprResult);
         if (!SymbolTable::isTypeCompatible(exprSymbol->type, type)) {
-            std::cerr << "error: type mismatch for variable " << varName << ". Expected " << Symbol::getTypeStr(type) << ", got " << Symbol::getTypeStr(exprSymbol->type) << ".\n";
+            FeedbackOutputFormat::showFeedbackOutput("error", "type mismatch for variable " + varName + ". Expected " + Symbol::getTypeStr(type) + ", got " + Symbol::getTypeStr(exprSymbol->type));
             exit(1);
         }
 
@@ -253,7 +257,7 @@ antlrcpp::Any CodeGenVisitor::visitAssignmentStatement(ifccParser::AssignmentSta
         Symbol *exprSymbol = findVariable(exprResult);
 
         if (!SymbolTable::isTypeCompatible(exprSymbol->type, type)) {
-            std::cerr << "error: type mismatch for variable " << varName << ". Expected " << Symbol::getTypeStr(type) << ", got " << Symbol::getTypeStr(exprSymbol->type) << ".\n";
+            FeedbackOutputFormat::showFeedbackOutput("error", "type mismatch for variable " + varName + ". Expected " + Symbol::getTypeStr(type) + ", got " + Symbol::getTypeStr(exprSymbol->type));
             exit(1);
         }
 
@@ -299,7 +303,7 @@ antlrcpp::Any CodeGenVisitor::visitReturn_stmt(ifccParser::Return_stmtContext *c
         // Si la fonction est de type void, on ne fait rien
         if (currentCfg->ast->getType() != VarType::VOID)
         {
-            std::cerr << "error: function " << currentCfg->ast->getName() << " must return a value.\n";
+            FeedbackOutputFormat::showFeedbackOutput("error", "function " + currentCfg->ast->getName() + " must return a value.");
             exit(1);
         }
         currentCfg->current_bb->add_IRInstr(IRInstr::jmp, VarType::INT, {currentCfg->get_epilogue_label()});
@@ -313,10 +317,10 @@ antlrcpp::Any CodeGenVisitor::visitReturn_stmt(ifccParser::Return_stmtContext *c
     VarType funcReturnType = currentCfg->ast->getType();
     if (!SymbolTable::isTypeCompatible(exprSymbol->type, funcReturnType)) {
         if (funcReturnType == VarType::VOID) {
-            std::cerr << "error: function " << currentCfg->ast->getName() << " can not return a value.\n";
+            FeedbackOutputFormat::showFeedbackOutput("error", "function " + currentCfg->ast->getName() + " can not return a value.");
             exit(1);
         }
-        std::cerr << "error: type mismatch for return value for function " << currentCfg->ast->getName() << ". Expected " << Symbol::getTypeStr(funcReturnType) << ", got " << Symbol::getTypeStr(exprSymbol->type) << ".\n";
+        FeedbackOutputFormat::showFeedbackOutput("error", "type mismatch for function " + currentCfg->ast->getName() + ". Expected " + Symbol::getTypeStr(funcReturnType) + ", got " + Symbol::getTypeStr(exprSymbol->type));
         exit(1);
     }
 
@@ -424,10 +428,11 @@ antlrcpp::Any CodeGenVisitor::visitVariableExpression(ifccParser::VariableExpres
 
     if (var == nullptr)
     {
-        std::cerr << "error: variable " << varName << " not declared\n";
+        FeedbackOutputFormat::showFeedbackOutput("error", "variable '" + varName + "' not declared");
         exit(1);
     }
 
+    var->markUsed();
     return varName;
 }
 
@@ -533,11 +538,11 @@ antlrcpp::Any CodeGenVisitor::visitPostIncrementExpression(ifccParser::PostIncre
     std::string varName = ctx->VAR()->getText();
     Symbol *var = findVariable(varName);
     if (var == nullptr) {
-        std::cerr << "error: variable " << varName << " not declared.\n";
+        FeedbackOutputFormat::showFeedbackOutput("error", "variable '" + varName + "' not declared");
         exit(1);
     }
     if (var->isConstant()) {
-        std::cerr << "error: cannot increment a constant variable " << varName << ".\n";
+        FeedbackOutputFormat::showFeedbackOutput("error", "cannot increment a constant variable " + varName);
         exit(1);
     }
 
@@ -550,11 +555,11 @@ antlrcpp::Any CodeGenVisitor::visitPostDecrementExpression(ifccParser::PostDecre
     std::string varName = ctx->VAR()->getText();
     Symbol *var = findVariable(varName);
     if (var == nullptr) {
-        std::cerr << "error: variable " << varName << " not declared.\n";
+        FeedbackOutputFormat::showFeedbackOutput("error", "variable '" + varName + "' not declared");
         exit(1);
     }
     if (var->isConstant()) {
-        std::cerr << "error: cannot decrement a constant variable " << varName << ".\n";
+        FeedbackOutputFormat::showFeedbackOutput("error", "cannot decrement a constant variable " + varName);
         exit(1);
     }
 
@@ -570,7 +575,7 @@ antlrcpp::Any CodeGenVisitor::visitArrayAccessExpression(ifccParser::ArrayAccess
     string pos = any_cast<string>(this->visit(ctx->expr()));
     Symbol *posSymbol = findVariable(pos);
     if (posSymbol->type != VarType::INT) {
-        std::cerr << "error: array index must be an integer.\n";
+        FeedbackOutputFormat::showFeedbackOutput("error", "array index must be an integer.");
         exit(1);
     }
     
@@ -587,7 +592,7 @@ antlrcpp::Any CodeGenVisitor::visitFunctionCallExpression(ifccParser::FunctionCa
     DefFonction *funcDef = getAstFunction(funcName);
     if (funcDef == nullptr)
     {
-        std::cerr << "error: function " << funcName << " not declared.\n";
+        FeedbackOutputFormat::showFeedbackOutput("error", "function " + funcName + " not declared");
         exit(1);
     }
 
@@ -595,7 +600,7 @@ antlrcpp::Any CodeGenVisitor::visitFunctionCallExpression(ifccParser::FunctionCa
     auto args = ctx->expr();
     if (args.size() > argRegs.size())
     {
-        std::cerr << "Error: function call with more than " << argRegs.size() << " arguments not supported." << std::endl;
+        FeedbackOutputFormat::showFeedbackOutput("error", "function call with more than " + std::to_string(argRegs.size()) + " arguments not supported");
         exit(1);
     }
 
@@ -613,7 +618,7 @@ antlrcpp::Any CodeGenVisitor::visitFunctionCallExpression(ifccParser::FunctionCa
         // Check if the number of arguments is correct
         if (i >= funcArgCount)
         {
-            std::cerr << "error: too many arguments for function " << funcName << ".\n";
+            FeedbackOutputFormat::showFeedbackOutput("error", "too many arguments for function " + funcName + ".");
             exit(1);
         }
 
@@ -622,7 +627,7 @@ antlrcpp::Any CodeGenVisitor::visitFunctionCallExpression(ifccParser::FunctionCa
         Symbol *argSymbol = findVariable(arg);
         if (!SymbolTable::isTypeCompatible(argSymbol->type, funcArgTypes[i]))
         {
-            std::cerr << "error: type mismatch for argument " << i + 1 << " of function " << funcName << ". Expected " << Symbol::getTypeStr(funcArgTypes[i]) << ", got " << Symbol::getTypeStr(argSymbol->type) << ".\n";
+            FeedbackOutputFormat::showFeedbackOutput("error", "type mismatch for argument " + std::to_string(i+1) + " of function " + funcName + ". Expected " + Symbol::getTypeStr(funcArgTypes[i]) + ", got " + Symbol::getTypeStr(argSymbol->type) + ".");
             exit(1);
         }
 
@@ -842,7 +847,7 @@ int CodeGenVisitor::getConstantResultBinaryOp(int leftValue, int rightValue, IRI
             return (leftValue || rightValue) ? 1 : 0;
 
         default:
-            std::cerr << "error: unsupported operation for constant optimization\n";
+            FeedbackOutputFormat::showFeedbackOutput("error", "unsupported operation for constant optimization.");
             exit(1);
     }
 }
@@ -868,7 +873,7 @@ int CodeGenVisitor::getConstantResultUnaryOp(int cstValue, IRInstr::Operation op
         case IRInstr::Operation::not_op:
             return !cstValue;
         default:
-            std::cerr << "error: unsupported operation for constant optimization\n";
+            FeedbackOutputFormat::showFeedbackOutput("error", "unsupported operation for constant optimization.");
             exit(1);
     }
 }
@@ -925,7 +930,7 @@ VarType CodeGenVisitor::getTypeExpr(string left, string right) {
     VarType rightType = findVariable(right)->type;
 
     if (!SymbolTable::isTypeCompatible(leftType, rightType)) {
-        std::cerr << "error: type mismatch for addition/subtraction operation.\n";
+        FeedbackOutputFormat::showFeedbackOutput("error", "type mismatch for addition/subtraction operation.");
         exit(1);
     }
 
