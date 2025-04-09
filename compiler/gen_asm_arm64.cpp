@@ -9,7 +9,7 @@ using namespace std;
 
 // ARM64 Assembly Code Generation
 
-#ifdef __aarch64__
+#if defined(__aarch64__) && !defined(__BLOCKED__)
 
 // AAPCS64: First 8 integer arguments go in w0-w7.
 vector<string> argRegs = {"w0", "w1", "w2", "w3", "w4", "w5", "w6", "w7"};

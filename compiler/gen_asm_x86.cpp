@@ -6,7 +6,7 @@ using namespace std;
 
 // Génération de code assembleur pour l'instruction for x86 machine
 
-#ifdef __x86_64__
+#if defined(__x86_64__) && !defined(__BLOCKED__)
 
 // According to the Linux System V AMD64 ABI, the first six integer arguments go in:
 // 1st: %rdi, 2nd: %rsi, 3rd: %rdx, 4th: %rcx, 5th: %r8, 6th: %r9.
