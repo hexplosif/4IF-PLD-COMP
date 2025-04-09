@@ -44,7 +44,5 @@ class SymbolTable
         int currentDeclOffset = 0;
 
         SymbolTable *parent = nullptr;
-        static constexpr std::array<VarType, 2> numberTypeRank = {VarType::CHAR, VarType::INT};
-        // char < int < unsigned int < long < unsigned long < long long < unsigned long long < float < double < long double
 
 };

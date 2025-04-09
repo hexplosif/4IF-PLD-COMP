@@ -126,6 +126,9 @@ bool SymbolTable::isTempVariable(std::string name) {
 }
 
 VarType SymbolTable::getHigherType(VarType type1, VarType type2) {
+    std::array<VarType, 2> numberTypeRank = {VarType::CHAR, VarType::INT}; //TODO: move this as a constant / static member
+    // char < int < unsigned int < long < unsigned long < long long < unsigned long long < float < double < long double
+
     int rankType1 = std::find(numberTypeRank.begin(), numberTypeRank.end(), type1) - numberTypeRank.begin();
     int rankType2 = std::find(numberTypeRank.begin(), numberTypeRank.end(), type2) - numberTypeRank.begin();
     if (rankType1 == numberTypeRank.end() - numberTypeRank.begin() || rankType2 == numberTypeRank.end() - numberTypeRank.begin()) {
