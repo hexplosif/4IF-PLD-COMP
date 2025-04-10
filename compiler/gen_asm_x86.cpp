@@ -557,7 +557,9 @@ std::string CFG::IR_reg_to_asm(std::string &reg, bool ignoreCst)
             if (p->getType() != VarType::FLOAT) {
                 return "$" + p->getCstValue();
             }
-            return p->label + "(%rip)";
+
+            std::string label = rodm->putFloatIfNotExists(std::stof(p->getCstValue()));
+            return label + "(%rip)";
         }
 
         if (p->scopeType == GLOBAL)

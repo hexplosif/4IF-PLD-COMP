@@ -20,14 +20,17 @@ private:
     void freeLastTempVariable(int inbVar);
 
     //================================= Implicit Conversion ===============================
-    std::string implicitConversion(std::string &varName, VarType type);
+    std::string implicitConversion(std::string &varName, VarType toType);
     VarType getTypeExpr(std::string &left, std::string &right);
 
     //================================= Constant Optimization ===============================
     std::string constantOptimizeBinaryOp(std::string &left, std::string &right, IRInstr::Operation op);
     std::string constantOptimizeUnaryOp(std::string &left, IRInstr::Operation op);
-    int getConstantResultBinaryOp(int leftValue, int rightValue, IRInstr::Operation op);
-    int getConstantResultUnaryOp(int cstValue, IRInstr::Operation op);
+    int getIntConstantResultBinaryOp(int leftValue, int rightValue, IRInstr::Operation op);
+    float getFloatConstantResultBinaryOp(float leftValue, float rightValue, IRInstr::Operation op);
+    int getIntConstantResultUnaryOp(int cstValue, IRInstr::Operation op);
+    float getFloatConstantResultUnaryOp(float cstValue, IRInstr::Operation op);
+
 
     //================================= Symbol Table Management ===============================
     void enterNewScope();

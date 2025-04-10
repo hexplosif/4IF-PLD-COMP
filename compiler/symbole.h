@@ -26,7 +26,6 @@ class Symbol
         VarType type;
         int offset;
         ScopeType scopeType;
-        std::string label; // for label of float constant value
 
         // Constructors
 

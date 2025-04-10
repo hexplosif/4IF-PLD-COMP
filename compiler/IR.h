@@ -126,6 +126,9 @@ public:
 
     static bool isRegConstant(std::string& reg);
 
+    // Read-Only Data Manager
+    RoDM* rodm = nullptr; /**< the read-only data manager */
+
 protected:
     static int nextBBnumber; /**< just for naming */
     std::vector<BasicBlock*> bbs; /**< all the basic blocks of this CFG*/

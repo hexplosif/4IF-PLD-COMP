@@ -45,6 +45,7 @@ antlrcpp::Any CodeGenVisitor::visitFunction_definition(ifccParser::Function_defi
     cfgs.push_back(currentCfg);
     currentCfg->currentScope = new SymbolTable(0);
     currentCfg->currentScope->setParent(gvm->getGlobalScope());
+    currentCfg->rodm = rodm;
 
     // Création du bloc d'entrée
     BasicBlock* enterBlock = new BasicBlock(currentCfg, funcName);
@@ -884,20 +885,34 @@ std::string CodeGenVisitor::constantOptimizeBinaryOp(std::string &left, std::str
 
     if (!(leftSymbol->isConstant() && rightSymbol->isConstant())) return NOT_CONST_OPTI;
 
-    if (leftSymbol->type != VarType::INT || rightSymbol->type != VarType::INT) { //TODO: not supported for other types yet
-        return NOT_CONST_OPTI;
+    if (leftSymbol->type != rightSymbol->type) {
+        FeedbackOutputFormat::showFeedbackOutput("error", "constant optimization only support same type for both operands.");
+        exit(1);
     }
 
-    // Si les deux opérandes sont des constantes, on peut évaluer l'expression directement.
-    int leftValue = stoi(leftSymbol->getCstValue());
-    int rightValue = stoi(rightSymbol->getCstValue());
-    int resultValue = getConstantResultBinaryOp(leftValue, rightValue, op);
-    freeLastTempVariable(2);
+    VarType type = leftSymbol->type;
+    string strResultValue = "";
 
-    return addTempConstVariable(VarType::INT, to_string(resultValue));
+    if (Symbol::isFloatingType(type)) {
+        float leftValue = stof(leftSymbol->getCstValue());
+        float rightValue = stof(rightSymbol->getCstValue());
+        float resultValue = getFloatConstantResultBinaryOp(leftValue, rightValue, op);
+        strResultValue = to_string(resultValue);
+    }
+
+    else {
+        int leftValue = stoi(leftSymbol->getCstValue());
+        int rightValue = stoi(rightSymbol->getCstValue());
+        int resultValue = getIntConstantResultBinaryOp(leftValue, rightValue, op);
+        strResultValue = to_string(resultValue);
+    }
+    // Si les deux opérandes sont des constantes, on peut évaluer l'expression directement.
+
+    freeLastTempVariable(2);
+    return addTempConstVariable(type, strResultValue);
 }
 
-int CodeGenVisitor::getConstantResultBinaryOp(int leftValue, int rightValue, IRInstr::Operation op) {
+int CodeGenVisitor::getIntConstantResultBinaryOp(int leftValue, int rightValue, IRInstr::Operation op) {
     switch (op) {
         case IRInstr::Operation::add:
             return leftValue + rightValue;
@@ -936,7 +951,37 @@ int CodeGenVisitor::getConstantResultBinaryOp(int leftValue, int rightValue, IRI
             return (leftValue || rightValue) ? 1 : 0;
 
         default:
-            FeedbackOutputFormat::showFeedbackOutput("error", "unsupported operation for constant optimization.");
+            FeedbackOutputFormat::showFeedbackOutput("error", "unsupported operation for int constant optimization.");
+            exit(1);
+    }
+}
+
+float CodeGenVisitor::getFloatConstantResultBinaryOp(float leftValue, float rightValue, IRInstr::Operation op) {
+    switch (op) {
+        case IRInstr::Operation::add:
+            return leftValue + rightValue;
+        case IRInstr::Operation::sub:
+            return leftValue - rightValue;
+        case IRInstr::Operation::mul:
+            return leftValue * rightValue;
+        case IRInstr::Operation::div:
+            return leftValue / rightValue;
+
+        case IRInstr::Operation::cmp_eq:
+            return (leftValue == rightValue) ? 1 : 0;
+        case IRInstr::Operation::cmp_ne:
+            return (leftValue != rightValue) ? 1 : 0;
+        case IRInstr::Operation::cmp_lt:
+            return (leftValue < rightValue) ? 1 : 0;
+        case IRInstr::Operation::cmp_le:
+            return (leftValue <= rightValue) ? 1 : 0;
+        case IRInstr::Operation::cmp_gt:
+            return (leftValue > rightValue) ? 1 : 0;
+        case IRInstr::Operation::cmp_ge:    
+            return (leftValue >= rightValue) ? 1 : 0;
+
+        default:
+            FeedbackOutputFormat::showFeedbackOutput("error", "unsupported operation for float constant optimization.");
             exit(1);
     }
 }
@@ -945,79 +990,100 @@ std::string CodeGenVisitor::constantOptimizeUnaryOp(std::string &expr, IRInstr::
     //TODO: only support int for now, add other types later
     Symbol *exprSymbol = findVariable(expr);
 
-    if (exprSymbol->isConstant()) {
-        // Si l'opérande est une constante, on peut évaluer l'expression directement.
-        if (exprSymbol->type != VarType::INT) { //TODO: add other types
-            return NOT_CONST_OPTI;
-        }
+    if (!exprSymbol->isConstant()) return NOT_CONST_OPTI;
 
-        int resultValue = getConstantResultUnaryOp( stoi(exprSymbol->getCstValue()), op);
-        freeLastTempVariable(1);
-        return addTempConstVariable( VarType::INT, to_string(resultValue) );
+    // Si l'opérande est une constante, on peut évaluer l'expression directement.
+    string strResultValue = "";
+
+    if (Symbol::isFloatingType(exprSymbol->type)) {
+        float resultValue = getFloatConstantResultUnaryOp(stof(exprSymbol->getCstValue()), op);
+        strResultValue = to_string(resultValue);
     }
 
-    return NOT_CONST_OPTI;
+    else {
+        int resultValue = getIntConstantResultUnaryOp(stoi(exprSymbol->getCstValue()), op);
+        strResultValue = to_string(resultValue);
+    }
+
+    freeLastTempVariable(1);
+    return addTempConstVariable( exprSymbol->type, strResultValue );
 }
 
-int CodeGenVisitor::getConstantResultUnaryOp(int cstValue,  IRInstr::Operation op) {
+int CodeGenVisitor::getIntConstantResultUnaryOp(int cstValue,  IRInstr::Operation op) {
     switch (op) {
         case IRInstr::Operation::unary_minus:
             return -cstValue;
         case IRInstr::Operation::not_op:
             return !cstValue;
         default:
-            FeedbackOutputFormat::showFeedbackOutput("error", "unsupported operation for constant optimization.");
+            FeedbackOutputFormat::showFeedbackOutput("error", "unsupported operation for int constant optimization.");
             exit(1);
     }
 }
 
+float CodeGenVisitor::getFloatConstantResultUnaryOp(float cstValue,  IRInstr::Operation op) {
+    switch (op) {
+        case IRInstr::Operation::unary_minus:
+            return -cstValue;
+        default:
+            FeedbackOutputFormat::showFeedbackOutput("error", "unsupported operation for float constant optimization.");
+            exit(1);
+    }
+}
 
 // ==============================================================
 //                     Implicit conversion
 // ==============================================================
-std::string CodeGenVisitor::implicitConversion(std::string &varName, VarType type) {
+std::string CodeGenVisitor::implicitConversion(std::string &varName, VarType toType) {
     Symbol *var = findVariable(varName);
     if (var == nullptr) {
         FeedbackOutputFormat::showFeedbackOutput("error", "variable '" + varName + "' not declared");
         exit(1);
     }
 
-    if (type == VarType::VOID) {
+    if (toType == VarType::VOID) {
         FeedbackOutputFormat::showFeedbackOutput("error", "cannot convert from " + Symbol::getTypeStr(var->type) + " to void");
         exit(1);
     }
 
     if (var->type == VarType::VOID) {
-        FeedbackOutputFormat::showFeedbackOutput("error", "cannot convert from void to " + Symbol::getTypeStr(type));
+        FeedbackOutputFormat::showFeedbackOutput("error", "cannot convert from void to " + Symbol::getTypeStr(toType));
         exit(1);
     }
 
     if (var->isConstant()) {
-        if ( Symbol::isFloatingType(type) ) {
+        if ( Symbol::isFloatingType(toType) && !Symbol::isFloatingType(var->type) ) {
             float value = std::stof(var->getCstValue());
-            var->label = rodm->putFloatIfNotExists(value);
+            return currentCfg->currentScope->addTempConstVariable(toType, to_string(value));  
+        } 
+        
+        if ( Symbol::isIntegerType(toType) & !Symbol::isIntegerType(var->type) ) {
+            int value = std::stoi(var->getCstValue());
+            return currentCfg->currentScope->addTempConstVariable(toType, to_string(value));
         }
-        var->type = type;
+
+        var->type = toType;
         return varName;
     }
 
-    if (var->type != type) {
-        std::string temp = currentCfg->currentScope->addTempVariable(type);
+    if (var->type != toType) {
+        std::string temp = currentCfg->currentScope->addTempVariable(toType);
 
-        if ( Symbol::isIntegerType(var->type) && Symbol::isFloatingType(type) ) {
-            currentCfg->current_bb->add_IRInstr(IRInstr::intToFloat, type, {temp, varName});
+        if ( Symbol::isIntegerType(var->type) && Symbol::isFloatingType(toType) ) {
+            currentCfg->current_bb->add_IRInstr(IRInstr::intToFloat, toType, {temp, varName});
         }
-
-        else if ( Symbol::isFloatingType(var->type) && Symbol::isIntegerType(type) ) {
-            currentCfg->current_bb->add_IRInstr(IRInstr::floatToInt, type, {temp, varName});
+    
+        else if ( Symbol::isFloatingType(var->type) && Symbol::isIntegerType(toType) ) {
+            currentCfg->current_bb->add_IRInstr(IRInstr::floatToInt, toType, {temp, varName});
         }
-
+    
         else { 
-            currentCfg->current_bb->add_IRInstr(IRInstr::copy, type, {temp, varName});
+            currentCfg->current_bb->add_IRInstr(IRInstr::copy, toType, {temp, varName});
         }
 
         return temp;
     }
+
     return varName;
 }
 
