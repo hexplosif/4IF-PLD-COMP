@@ -67,7 +67,7 @@ void GVM::addGlobalVariable(std::string name, VarType type)
     globalScope->addGlobalVariable(name, type);
 }
 
-void GVM::setGlobalVariableValue(std::string name, int value)
+void GVM::setGlobalVariableValue(std::string name, std::string value)
 {
     if (globalScope->findVariableThisScope(name) != nullptr)
     {
@@ -80,7 +80,60 @@ void GVM::setGlobalVariableValue(std::string name, int value)
     }
 }
 
-std::string GVM::addTempConstVariable(VarType type, int value)
+std::string GVM::addTempConstVariable(VarType type, string value)
 {
     return globalScope->addTempConstVariable(type, value);
+}
+
+//* ---------------------- Read only data Manager ---------------------- */
+RoDM::RoDM()
+{
+    floatData = std::map<std::string, float>();   
+    labelCounter = 0;
+}
+
+std::string RoDM::getNewFloatLabel() {
+    std::string label = ".LFD" + std::to_string(labelCounter++);
+    return label;
+}
+
+std::string RoDM::putFloatIfNotExists(float value)
+{
+    // Check if the value is already in the map
+    for (const auto &pair : floatData)
+    {
+        if (pair.second == value)
+        {
+            return pair.first; // Return the existing label
+        }
+    }
+
+    // If not, create a new label and add it to the map
+    std::string label = getNewFloatLabel();
+    floatData[label] = value;
+    return label; // Return the new label
+}
+
+std::string RoDM::floatToLong_Ieee754(float value) {
+    union {
+        float d;
+        uint32_t i;
+    } u;
+    u.d = value;
+
+    std::ostringstream oss;
+    oss << std::hex << u.i;
+    // cout << "converted" << std::hex << u.i;
+
+    return oss.str();
+}
+
+std::string RoDM::getLabelDataForUnaryOp() {
+    if (needDataForUnaryOp) {
+        return labelDataForUnaryOp;
+    }
+
+    needDataForUnaryOp = true;
+    labelDataForUnaryOp = getNewFloatLabel();
+    return labelDataForUnaryOp;
 }

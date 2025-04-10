@@ -16,6 +16,25 @@ vector<string> argRegs = {"%edi", "%esi", "%edx", "%ecx", "%r8d", "%r9d"};
 vector<string> tempRegs = {"%eax", "%edx", "%ebx", "%ecx", "%esi", "%edi", "%e8d", "%e9d"}; // Temporary registers
 string returnReg = "%eax"; // Register used for return value
 
+
+bool isRegister(std::string &reg)
+{
+    return ( reg[0] == '%' && !reg.empty() );
+}
+
+void move(std::ostream &o, VarType t, std::string src, std::string dest)
+{
+    if (t == VarType::FLOAT)
+    {
+        if (isRegister(src) && isRegister(dest))
+            o << "    movd " << src << ", " << dest << "\n";
+        else
+            o << "    movss " << src << ", " << dest << "\n";
+        return;
+    }
+    o << "    movl " << src << ", " << dest << "\n";
+}
+
 void IRInstr::gen_asm(std::ostream &o)
 {
     static int labelCounter = 0;
@@ -29,27 +48,63 @@ void IRInstr::gen_asm(std::ostream &o)
         break;
     case copy:
         // copy: params[0] = destination, params[1] = source
+        if (t == VarType::FLOAT) {
+            move(o, t, params[1], "%xmm0");
+            move(o, t, "%xmm0", params[0]);
+            break;
+        }
+
         o << "    movl " << params[1] << ", %eax\n";
         if (params[0] != "%eax")
             o << "    movl %eax, " << params[0] << "\n"; // Stocke le résultat
         break;
     case add:
         // add: params[0] = dest, params[1] = gauche, params[2] = droite
+        if (t == VarType::FLOAT) {
+            move(o, t, params[1], "%xmm0");
+            o << "    addss " << params[2] << ", %xmm0\n";
+            move(o, t, "%xmm0", params[0]);
+            break;
+        }
+
         o << "    movl " << params[1] << ", %eax\n";
         o << "    addl " << params[2] << ", %eax\n";
         o << "    movl %eax, " << params[0] << "\n";
         break;
     case sub:
+        // sub: params[0] = dest, params[1] = gauche, params[2] = droite
+        if (t == VarType::FLOAT) {
+            move(o, t, params[1], "%xmm0");
+            o << "    subss " << params[2] << ", %xmm0\n";
+            move(o, t, "%xmm0", params[0]);
+            break;
+        }
+
         o << "    movl " << params[1] << ", %eax\n";
         o << "    subl " << params[2] << ", %eax\n";
         o << "    movl %eax, " << params[0] << "\n";
         break;
     case mul:
+        // mul: params[0] = dest, params[1] = gauche, params[2] = droite
+        if (t == VarType::FLOAT) {
+            move(o, t, params[1], "%xmm0");
+            o << "    mulss " << params[2] << ", %xmm0\n";
+            move(o, t, "%xmm0", params[0]);
+            break;
+        }
+
         o << "    movl " << params[1] << ", %eax\n";
         o << "    imull " << params[2] << ", %eax\n";
         o << "    movl %eax, " << params[0] << "\n";
         break;
     case div: // params : dest, source1, source2
+        if (t == VarType::FLOAT) {
+            move(o, t, params[1], "%xmm0");
+            o << "    divss " << params[2] << ", %xmm0\n";
+            move(o, t, "%xmm0", params[0]);
+            break;
+        }
+
         o << "    movl " << params[1] << ", %eax\n";
         o << "    cltd\n";
         o << "    idivl " << params[2] << "\n";
@@ -134,6 +189,14 @@ void IRInstr::gen_asm(std::ostream &o)
     }
     case incr:
         // incr: params[0] = var
+        if (t == VarType::FLOAT) {
+            move(o, t, params[0], "%xmm1");
+            move(o, t, params[1], "%xmm0"); // params[1] = label for float 1.0
+            o << "    addss	%xmm1, %xmm0\n";
+            o << "    movss %xmm0, " << params[0] << "\n";
+            break;
+        }
+
         o << "    movl " << params[0] << ", %eax\n";
         o << "    addl $1, %eax\n";
         o << "    movl %eax, " << params[0] << "\n";
@@ -141,6 +204,14 @@ void IRInstr::gen_asm(std::ostream &o)
 
     case decr:
         // decr: params[0] = var
+        if (t == VarType::FLOAT) {
+            move(o, t, params[0], "%xmm0");
+            move(o, t, params[1], "%xmm1"); // params[1] = label for float 1.0
+            o << "    subss	%xmm1, %xmm0\n";
+            o << "    movss %xmm0, " << params[0] << "\n";
+            break;
+        }
+
         o << "    movl " << params[0] << ", %eax\n";
         o << "    subl $1, %eax\n";
         o << "    movl %eax, " << params[0] << "\n";
@@ -148,6 +219,19 @@ void IRInstr::gen_asm(std::ostream &o)
 
     case cmp_eq:
         // cmp_eq: params[0] = dest, params[1] = gauche, params[2] = droite
+        if (t == VarType::FLOAT) {
+            move(o, t, params[1], "%xmm0");
+            o << "    ucomiss " << params[2] << ", %xmm0\n";
+            o << "    setnp %al\n";
+            o << "    movl	$0, %edx\n";
+            move(o, t, params[1], "%xmm0");
+            o << "    ucomiss " << params[2] << ", %xmm0\n";
+            o << "    cmovne %edx, %eax\n";
+            o << "    movzbl %al, %eax\n";
+            o << "    movl %eax, " << params[0] << "\n";
+            break;
+        }
+
         o << "    movl " << params[1] << ", %eax\n";
         o << "    cmpl " << params[2] << ", %eax\n";
         o << "    sete %al\n";
@@ -156,6 +240,15 @@ void IRInstr::gen_asm(std::ostream &o)
         break;
     case cmp_lt:
         // cmp_lt: params[0] = dest, params[1] = gauche, params[2] = droite
+        if (t == VarType::FLOAT) {
+            move(o, t, params[1], "%xmm0");
+            o << "    comiss " << params[2] << ", %xmm0\n";
+            o << "    seta %al\n";
+            o << "    movzbl %al, %eax\n";
+            o << "    movl %eax, " << params[0] << "\n";
+            break;
+        }
+
         o << "    movl " << params[1] << ", %eax\n";
         o << "    cmpl " << params[2] << ", %eax\n";
         o << "    setl %al\n";
@@ -164,6 +257,15 @@ void IRInstr::gen_asm(std::ostream &o)
         break;
     case cmp_le:
         // cmp_le: params[0] = dest, params[1] = gauche, params[2] = droite
+        if (t == VarType::FLOAT) {
+            move(o, t, params[1], "%xmm0");
+            o << "    comiss " << params[2] << ", %xmm0\n";
+            o << "    setnb %al\n";
+            o << "    movzbl %al, %eax\n";
+            o << "    movl %eax, " << params[0] << "\n";
+            break;
+        }
+
         o << "    movl " << params[1] << ", %eax\n";
         o << "    cmpl " << params[2] << ", %eax\n";
         o << "    setle %al\n";
@@ -173,6 +275,19 @@ void IRInstr::gen_asm(std::ostream &o)
 
     case cmp_ne:
         // cmp_ne: params[0] = dest, params[1] = gauche, params[2] = droite
+        if (t == VarType::FLOAT) {
+            move(o, t, params[1], "%xmm0");
+            o << "    ucomiss " << params[2] << ", %xmm0\n";
+            o << "    setp %al\n";
+            o << "    movl	$1, %edx\n";
+            move(o, t, params[1], "%xmm0");
+            o << "    ucomiss " << params[2] << ", %xmm0\n";
+            o << "    cmovne %edx, %eax\n";
+            o << "    movzbl %al, %eax\n";
+            o << "    movl %eax, " << params[0] << "\n";
+            break;
+        }
+
         o << "    movl " << params[1] << ", %eax\n";
         o << "    cmpl " << params[2] << ", %eax\n";
         o << "    setne %al\n";
@@ -182,6 +297,15 @@ void IRInstr::gen_asm(std::ostream &o)
 
     case cmp_gt:
         // cmp_gt: params[0] = dest, params[1] = gauche, params[2] = droite
+        if (t == VarType::FLOAT) {
+            move(o, t, params[1], "%xmm0");
+            o << "    comiss " << params[2] << ", %xmm0\n";
+            o << "    seta %al\n";
+            o << "    movzbl %al, %eax\n";
+            o << "    movl %eax, " << params[0] << "\n";
+            break;
+        }
+
         o << "    movl " << params[1] << ", %eax\n";
         o << "    cmpl " << params[2] << ", %eax\n";
         o << "    setg %al\n";
@@ -191,6 +315,15 @@ void IRInstr::gen_asm(std::ostream &o)
 
     case cmp_ge:
         // cmp_ge: params[0] = dest, params[1] = gauche, params[2] = droite
+        if (t == VarType::FLOAT) {
+            move(o, t, params[1], "%xmm0");
+            o << "    comiss " << params[2] << ", %xmm0\n";
+            o << "    setnb %al\n";
+            o << "    movzbl %al, %eax\n";
+            o << "    movl %eax, " << params[0] << "\n";
+            break;
+        }
+
         o << "    movl " << params[1] << ", %eax\n";
         o << "    cmpl " << params[2] << ", %eax\n";
         o << "    setge %al\n";
@@ -221,6 +354,14 @@ void IRInstr::gen_asm(std::ostream &o)
 
     case unary_minus:
         // unary_minus: params[0] = dest, params[1] = source
+        if (t == VarType::FLOAT) {
+            move(o, t, params[1], "%xmm0");
+            move(o, t, params[2], "%xmm1"); // params[2] = float data for unary
+            o << "    xorps %xmm1, %xmm0\n"; 
+            move(o, t, "%xmm0", params[0]);
+            break;
+        }
+
         o << "    movl " << params[1] << ", %eax\n";
         o << "    negl %eax\n";
         o << "    movl %eax, " << params[0] << "\n";
@@ -281,6 +422,19 @@ void IRInstr::gen_asm(std::ostream &o)
         o << "    movl %eax, " << params[0] << "\n";
         break;
     }
+
+    case intToFloat:
+        // intToFloat: params[0] = destination, params[1] = source
+        o << "    pxor %xmm0, %xmm0\n"; // Clear xmm0
+        o << "    cvtsi2ssl " << params[1] << ", %xmm0\n"; // Convert int to double
+        move(o, t, "%xmm0", params[0]);
+        break;
+
+    case floatToInt:
+        // floatToInt: params[0] = destination, params[1] = source
+        o << "    cvttss2sil " << params[1] << ", %eax\n"; // Convert double to int
+        o << "    movl %eax, " << params[0] << "\n";
+        break;
 
     case rmem:
         // rmem: params[0] = destination, params[1] = adresse
@@ -399,7 +553,10 @@ std::string CFG::IR_reg_to_asm(std::string &reg, bool ignoreCst)
     if (p != nullptr)
     {
         if (p->isConstant() & !ignoreCst) {
-            return "$" + std::to_string(p->getCstValue());
+            if (p->getType() != VarType::FLOAT) {
+                return "$" + p->getCstValue();
+            }
+            return p->label + "(%rip)";
         }
 
         if (p->scopeType == GLOBAL)
@@ -407,6 +564,11 @@ std::string CFG::IR_reg_to_asm(std::string &reg, bool ignoreCst)
             return reg + "(%rip)";
         }
         return "-" + to_string(p->offset) + "(%rbp)";
+    }
+
+    if (!reg.empty() && reg[0] == '.' && reg[1] == 'L') // Label
+    {
+        return reg + "(%rip)";
     }
     return reg;
 }
@@ -459,6 +621,38 @@ void GVM::gen_asm(std::ostream &o)
     o << "    .text\n";
 }
 
+// ---------------------- Read only data Manager ---------------------- */
+void RoDM::gen_asm(std::ostream &o)
+{
+    o << ".section .rodata" << std::endl;
+    for (const auto &pair : floatData)
+    {
+        o << pair.first << ":" << "         // = " << pair.second << std::endl;
+        std::string hexIEEEValue = floatToLong_Ieee754(pair.second);
+
+        std::string lower = hexIEEEValue.substr(0, 8);
+        // std::string upper = hexIEEEValue.substr(8, 8);
+        
+        // Convert to long long representation
+        unsigned long long lowerLong = std::stoull(lower, nullptr, 16);
+        // unsigned long long upperLong = std::stoull(upper, nullptr, 16);
+        // Lower 32 bits
+        // o << "    .long " << upperLong << std::endl;
+        // Upper 32 bits
+        o << "    .long " << lowerLong << std::endl;
+    }
+
+    if (needDataForUnaryOp) {
+        o << labelDataForUnaryOp << ":" << "         // = " << 0.0f << std::endl;
+        o << "    .long -2147483648" << std::endl;
+        o << "    .long 0" << std::endl;
+        o << "    .long 0" << std::endl;
+        o << "    .long 0" << std::endl;
+    }
+
+    o << "\t.text" << std::endl;
+}
+
 // -------------------------- Code gen -------------------
 void CodeGenVisitor::gen_asm(ostream &os)
 {
@@ -470,6 +664,7 @@ void CodeGenVisitor::gen_asm(ostream &os)
         cfg->gen_asm(os);
         os << "\n//================================================= \n\n";
     }
+    rodm->gen_asm(os);
 }
 
 #endif // __x86_64__

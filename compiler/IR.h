@@ -16,6 +16,7 @@
 
 class BasicBlock;
 class CFG;
+class RoDM;
 
 //! The class for one 3-address instruction
 class IRInstr {
@@ -53,6 +54,8 @@ public:
         not_op,
         log_and,
         log_or,
+        intToFloat,
+        floatToInt,
         call,
         jmp
     } Operation;
@@ -136,14 +139,33 @@ class GVM { // Global Variable Manager
         void gen_asm(std::ostream& o);
 
         void addGlobalVariable(std::string name, VarType type);
-        void setGlobalVariableValue(std::string name, int value);
-        std::string addTempConstVariable(VarType type, int value);
+        void setGlobalVariableValue(std::string name, std::string value);
+        std::string addTempConstVariable(VarType type, std::string value);
 
         SymbolTable* getGlobalScope() { return globalScope; }
 
     protected:
         SymbolTable* globalScope; /**< the symbol table of the global scope */
-        std::map<std::string, int> globalVariableValues; /**< the values of the global variables */
+        std::map<std::string, std::string> globalVariableValues; /**< the values of the global variables */
 };
 
-#endif
+//** The class to manage read-only data */
+class RoDM { //Read Only Data Manager
+    public:
+        RoDM();
+        void gen_asm(std::ostream& o);
+        std::string putFloatIfNotExists(float value); /**< returns the label of the double data */
+        std::string getLabelDataForUnaryOp(); /**< returns the label of the double data */
+    
+    private:
+        bool needDataForUnaryOp = false; /**< if true, the data used in unary op*/
+        std::string labelDataForUnaryOp; /**< the label of the data used in unary op */
+
+        std::map<std::string, float> floatData; /**< the float values of the read-only data */
+        int labelCounter; /**< the label counter for the read-only data */
+        std::string getNewFloatLabel(); /**< returns the label of the double data */
+
+        std::string floatToLong_Ieee754(float value); /**< returns the IEEE 754 32bits version of double */
+};
+
+#endif // IR_H

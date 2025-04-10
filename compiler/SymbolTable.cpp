@@ -1,6 +1,5 @@
 #include "SymbolTable.h"
 #include <iomanip>
-#include <array>
 #include "FeedbackStyleOutput.h"
 
 SymbolTable::SymbolTable( int initialOffset ) {
@@ -49,7 +48,7 @@ std::string SymbolTable::addTempVariable(VarType type, int size) {
     return name;
 }
 
-std::string SymbolTable::addTempConstVariable(VarType type, int value) {
+std::string SymbolTable::addTempConstVariable(VarType type, std::string value) {
     currentDeclOffset += 4;
     std::string name = "!tmp" + std::to_string(currentDeclOffset);
     Symbol p = { type , currentDeclOffset, ScopeType::BLOCK, value };
@@ -131,23 +130,6 @@ void SymbolTable::printTable() {
 
 bool SymbolTable::isTempVariable(std::string name) {
     return name.find("!tmp") != std::string::npos;
-}
-
-VarType SymbolTable::getHigherType(VarType type1, VarType type2) {
-    std::array<VarType, 2> numberTypeRank = {VarType::CHAR, VarType::INT}; //TODO: move this as a constant / static member
-    // char < int < unsigned int < long < unsigned long < long long < unsigned long long < float < double < long double
-
-    int rankType1 = std::find(numberTypeRank.begin(), numberTypeRank.end(), type1) - numberTypeRank.begin();
-    int rankType2 = std::find(numberTypeRank.begin(), numberTypeRank.end(), type2) - numberTypeRank.begin();
-    if (rankType1 == numberTypeRank.end() - numberTypeRank.begin() || rankType2 == numberTypeRank.end() - numberTypeRank.begin()) {
-        std::cerr << "error: can not convert type from " << Symbol::getTypeStr(type1) << " to " << Symbol::getTypeStr(type2) << std::endl;
-        exit(1);
-    }
-    return numberTypeRank[std::max(rankType1, rankType2)];
-}
-
-bool SymbolTable::isTypeCompatible(VarType type1, VarType type2) {
-    return (type1 == type2 || (type1 == INT && type2 == CHAR) || (type1 == CHAR && type2 == INT));
 }
 
 void SymbolTable::checkUnusedVariables() {

@@ -52,16 +52,18 @@ expr
     | VAR                                           # VariableExpression
     | VAR '[' expr ']'                              # ArrayAccessExpression
     | CONST                                         # ConstantExpression
+    | CONST_DOUBLE                                  # ConstantDoubleExpression
     | CONST_CHAR                                    # ConstantCharExpression
     | CONST_STRING                                  # ConstantStringExpression
     | VAR '++'                                      # PostIncrementExpression
     | VAR '--'                                      # PostDecrementExpression
     ;
 
-type : 'int' | 'char' ;
+type : 'int' | 'char' | 'float' ;
 
 VAR   : [a-zA-Z_][a-zA-Z_0-9]* ;  // Identifiants pour les variables
 CONST : [0-9]+ ;                 // Constantes entières
+CONST_DOUBLE : [0-9]+ '.' [0-9]+ ; // Constantes flottantes
 CONST_CHAR : '\'' [ -~] '\'' ;
 CONST_STRING : '"' ([ -~])*? '"' ;
 

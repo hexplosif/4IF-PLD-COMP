@@ -10,23 +10,30 @@
 class CodeGenVisitor : public ifccBaseVisitor {
 private:
     GVM* gvm; // Global Variable Manager
+    RoDM* rodm; // Read Only Data Manager
     std::vector<CFG*> cfgs; // List of CFGs
     CFG* currentCfg = nullptr; // Control Flow Graph
     
+    //================================= Variable Management ===============================
     Symbol* findVariable(std::string varName);
-    std::string addTempConstVariable(VarType type, int value);
+    std::string addTempConstVariable(VarType type, std::string value);
     void freeLastTempVariable(int inbVar);
 
+    //================================= Implicit Conversion ===============================
+    std::string implicitConversion(std::string &varName, VarType type);
+    VarType getTypeExpr(std::string &left, std::string &right);
+
+    //================================= Constant Optimization ===============================
     std::string constantOptimizeBinaryOp(std::string &left, std::string &right, IRInstr::Operation op);
     std::string constantOptimizeUnaryOp(std::string &left, IRInstr::Operation op);
     int getConstantResultBinaryOp(int leftValue, int rightValue, IRInstr::Operation op);
     int getConstantResultUnaryOp(int cstValue, IRInstr::Operation op);
 
-    VarType getTypeExpr(std::string left, std::string right);
-
+    //================================= Symbol Table Management ===============================
     void enterNewScope();
     void exitCurrentScope();
 
+    //================================= Function Management ===============================
     DefFonction* getAstFunction(std::string name);
 
 public:
@@ -50,6 +57,7 @@ public:
     virtual antlrcpp::Any visitAddSubExpression(ifccParser::AddSubExpressionContext *ctx) override;
     virtual antlrcpp::Any visitMulDivExpression(ifccParser::MulDivExpressionContext *ctx) override;
     virtual antlrcpp::Any visitConstantExpression(ifccParser::ConstantExpressionContext *ctx) override;
+    virtual antlrcpp::Any visitConstantDoubleExpression(ifccParser::ConstantDoubleExpressionContext *ctx) override;
     virtual antlrcpp::Any visitConstantCharExpression(ifccParser::ConstantCharExpressionContext *ctx) override;
     virtual antlrcpp::Any visitConstantStringExpression(ifccParser::ConstantStringExpressionContext *ctx) override;
     virtual antlrcpp::Any visitVariableExpression(ifccParser::VariableExpressionContext *ctx) override;

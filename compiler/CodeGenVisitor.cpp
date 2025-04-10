@@ -21,6 +21,7 @@ antlrcpp::Any CodeGenVisitor::visitProg(ifccParser::ProgContext *ctx)
 {
     // Création du GVM (Global Variable Manager)
     gvm = new GVM();
+    rodm = new RoDM();
     cfgs = vector<CFG*>();
 
     for (auto child : ctx->children)
@@ -35,7 +36,7 @@ antlrcpp::Any CodeGenVisitor::visitFunction_definition(ifccParser::Function_defi
 {
     string funcType = ctx->retType()->getText();
     string funcName = ctx->VAR()->getText(); //TODO: verify if same name is declared twice
-    DefFonction *funcDef = new DefFonction(funcName, Symbol::getType(funcType)); //TODO: modify to get the type of the function
+    DefFonction *funcDef = new DefFonction(funcName, Symbol::getTypeFromStr(funcType)); //TODO: modify to get the type of the function
 
     // On crée un CFG pour la fonction
     currentCfg = new CFG(funcDef);
@@ -65,7 +66,7 @@ antlrcpp::Any CodeGenVisitor::visitFunction_definition(ifccParser::Function_defi
             string type = param->type()->getText();
             string paramName = param->VAR()->getText();
 
-            VarType argType = Symbol::getType(type);
+            VarType argType = Symbol::getTypeFromStr(type);
             currentCfg->currentScope->addLocalVariable(paramName, argType); //TODO: modify to get the type of the params
             currentCfg->current_bb->add_IRInstr(IRInstr::copy, argType, {paramName, argRegs[i]}); //TODO: modify to get the type of the params
             paramsTypes.push_back(argType);
@@ -123,7 +124,7 @@ antlrcpp::Any CodeGenVisitor::visitDecl_stmt(ifccParser::Decl_stmtContext *ctx)
 
 antlrcpp::Any CodeGenVisitor::visitSub_declWithType(ifccParser::Sub_declContext *ctx, string varType)
 {
-    VarType type = Symbol::getType(varType);
+    VarType type = Symbol::getTypeFromStr(varType);
     bool isGlobalScope = (currentCfg == nullptr);
     string varName = ctx->VAR()->getText();
 
@@ -141,12 +142,9 @@ antlrcpp::Any CodeGenVisitor::visitSub_declWithType(ifccParser::Sub_declContext 
                 exit(1);
             }
 
-            if (!SymbolTable::isTypeCompatible(exprCstSymbol->type, type)) {
-                FeedbackOutputFormat::showFeedbackOutput("error", "type mismatch for global variable " + varName + ". Expected " + varType + ", got " + Symbol::getTypeStr(exprCstSymbol->type));
-                exit(1);
-            }
-
+            string typedExpr = this->implicitConversion(exprCst, type);            
             gvm->setGlobalVariableValue(varName, exprCstSymbol->getCstValue());
+            freeLastTempVariable(1);
         }
     }
     else
@@ -171,8 +169,8 @@ antlrcpp::Any CodeGenVisitor::visitSub_declWithType(ifccParser::Sub_declContext 
             currentCfg->currentScope->addLocalVariable(varName, VarType::CHAR_PTR, size);
             for (int i = 0; i < size; i++)
             {
-                string tempChar = currentCfg->currentScope->addTempConstVariable(VarType::CHAR, (int)value[i]);
-                string tempPos = currentCfg->currentScope->addTempConstVariable(VarType::INT, i);
+                string tempChar = currentCfg->currentScope->addTempConstVariable(VarType::CHAR, to_string((int)value[i]));
+                string tempPos = currentCfg->currentScope->addTempConstVariable(VarType::INT, to_string(i));
                 currentCfg->current_bb->add_IRInstr(IRInstr::copyTblx, VarType::CHAR_PTR, {varName, tempChar, tempPos});
             }
 
@@ -181,6 +179,7 @@ antlrcpp::Any CodeGenVisitor::visitSub_declWithType(ifccParser::Sub_declContext 
             int size = std::stoi(ctx->CONST()->getText());
             VarType ptrType = (type == VarType::INT) ? VarType::INT_PTR : VarType::CHAR_PTR; //TODO: ameliorer celui ligne
             currentCfg->currentScope->addLocalVariable(varName, ptrType, size); 
+
             int i = 0;
             while(ctx->expr(i)) {
                 if (i > size) {
@@ -188,29 +187,27 @@ antlrcpp::Any CodeGenVisitor::visitSub_declWithType(ifccParser::Sub_declContext 
                     exit(1);
                 }
 
-                string tempPos = currentCfg->currentScope->addTempConstVariable(VarType::INT, i);
-                // int value = std::stoi(ctx->CONST(i)->getText());
-                // string tempValue = addTempConstVariable(VarType::INT, value);
+                string tempPos = currentCfg->currentScope->addTempConstVariable(VarType::INT, to_string(i));
                 string tempValue = any_cast<string>(visit(ctx->expr(i)));
-                currentCfg->current_bb->add_IRInstr(IRInstr::copyTblx, ptrType, {varName, tempValue, tempPos});
+
+                string typedTempValue = this->implicitConversion(tempValue, type);    
+                currentCfg->current_bb->add_IRInstr(IRInstr::copyTblx, ptrType, {varName, typedTempValue, tempPos});
+
+                if (findVariable(typedTempValue)->isConstant()) {
+                    freeLastTempVariable(1);
+                }
                 i++;
             }
-        }
-        else
-        {
+
+        } else{ // Cas var normal
             currentCfg->currentScope->addLocalVariable(varName, type);
             if (ctx->expr(0)) {
                 string expr = any_cast<string>(visit(ctx->expr(0)));
-                Symbol *exprSymbol = findVariable(expr);
                 
-                if (!SymbolTable::isTypeCompatible(exprSymbol->type, type)) {
-                    FeedbackOutputFormat::showFeedbackOutput("error", "type mismatch for variable " + varName + ". Expected " + varType + ", got " + Symbol::getTypeStr(exprSymbol->type));
-                    exit(1);
-                }
-
-                currentCfg->current_bb->add_IRInstr(IRInstr::copy, type, {varName, expr});
+                string typedExpr = this->implicitConversion(expr, type);
+                currentCfg->current_bb->add_IRInstr(IRInstr::copy, type, {varName, typedExpr});
                 
-                if (exprSymbol->isConstant()) {
+                if (findVariable(typedExpr)->isConstant()) {
                     freeLastTempVariable(1);
                 }
             }
@@ -241,82 +238,72 @@ antlrcpp::Any CodeGenVisitor::visitAssignmentStatement(ifccParser::AssignmentSta
     { // C'est un tableau
         string pos = any_cast<string>(this->visit(assign->expr(0)));
         string exprResult = any_cast<string>(this->visit(assign->expr(1)));
-
-        Symbol *exprSymbol = findVariable(exprResult);
-        if (!SymbolTable::isTypeCompatible(exprSymbol->type, type)) {
-            FeedbackOutputFormat::showFeedbackOutput("error", "type mismatch for variable " + varName + ". Expected " + Symbol::getTypeStr(type) + ", got " + Symbol::getTypeStr(exprSymbol->type));
-            exit(1);
-        }
+        string typedExprResult = this->implicitConversion(exprResult, type);
 
         if (op == "=")
         {
-            currentCfg->current_bb->add_IRInstr(IRInstr::copyTblx, type, {varName, exprResult, pos});
+            currentCfg->current_bb->add_IRInstr(IRInstr::copyTblx, type, {varName, typedExprResult, pos});
         }
         else if (op == "+=")
         {
-            currentCfg->current_bb->add_IRInstr(IRInstr::addTblx, type, {varName, exprResult, pos});
+            currentCfg->current_bb->add_IRInstr(IRInstr::addTblx, type, {varName, typedExprResult, pos});
         }
         else if (op == "-=")
         {
-            currentCfg->current_bb->add_IRInstr(IRInstr::subTblx, type, {varName, exprResult, pos});
+            currentCfg->current_bb->add_IRInstr(IRInstr::subTblx, type, {varName, typedExprResult, pos});
         }
         else if (op == "*=")
         {
-            currentCfg->current_bb->add_IRInstr(IRInstr::mulTblx, type, {varName, exprResult, pos});
+            currentCfg->current_bb->add_IRInstr(IRInstr::mulTblx, type, {varName, typedExprResult, pos});
         }
         else if (op == "/=")
         {
-            currentCfg->current_bb->add_IRInstr(IRInstr::copy, type, {tempRegs[4], exprResult});
+            currentCfg->current_bb->add_IRInstr(IRInstr::copy, type, {tempRegs[4], typedExprResult});
             currentCfg->current_bb->add_IRInstr(IRInstr::divTblx, type, {varName, tempRegs[4], pos});
         }
         else if (op == "%=")
         {
-            currentCfg->current_bb->add_IRInstr(IRInstr::copy, type, {tempRegs[4], exprResult});
+            currentCfg->current_bb->add_IRInstr(IRInstr::copy, type, {tempRegs[4], typedExprResult});
             currentCfg->current_bb->add_IRInstr(IRInstr::modTblx, type, {varName, tempRegs[4], pos});
         }
 
-        if (exprSymbol->isConstant()) {
+        if (findVariable(typedExprResult)->isConstant()) {
             freeLastTempVariable(1);
         }
     }
     else
     {
         string exprResult = any_cast<string>(this->visit(assign->expr(0)));
-        Symbol *exprSymbol = findVariable(exprResult);
-
-        if (!SymbolTable::isTypeCompatible(exprSymbol->type, type)) {
-            FeedbackOutputFormat::showFeedbackOutput("error", "type mismatch for variable " + varName + ". Expected " + Symbol::getTypeStr(type) + ", got " + Symbol::getTypeStr(exprSymbol->type));
-            exit(1);
-        }
+        string typedExprResult = this->implicitConversion(exprResult, type);
 
         if (op == "=")
         {
-            currentCfg->current_bb->add_IRInstr(IRInstr::copy, type, {varName, exprResult});
+            currentCfg->current_bb->add_IRInstr(IRInstr::copy, type, {varName, typedExprResult});
         }
         else if (op == "+=")
         {
-            currentCfg->current_bb->add_IRInstr(IRInstr::add, type, {varName, varName, exprResult});
+            currentCfg->current_bb->add_IRInstr(IRInstr::add, type, {varName, varName, typedExprResult});
         }
         else if (op == "-=")
         {
-            currentCfg->current_bb->add_IRInstr(IRInstr::sub, type, {varName, varName, exprResult});
+            currentCfg->current_bb->add_IRInstr(IRInstr::sub, type, {varName, varName, typedExprResult});
         }
         else if (op == "*=")
         {
-            currentCfg->current_bb->add_IRInstr(IRInstr::mul, type, {varName, varName, exprResult});
+            currentCfg->current_bb->add_IRInstr(IRInstr::mul, type, {varName, varName, typedExprResult});
         }
         else if (op == "/=")
         {
-            currentCfg->current_bb->add_IRInstr(IRInstr::copy, type, {tempRegs[2], exprResult});
+            currentCfg->current_bb->add_IRInstr(IRInstr::copy, type, {tempRegs[2], typedExprResult});
             currentCfg->current_bb->add_IRInstr(IRInstr::div, type, {varName, varName, tempRegs[2]});
         }
         else if (op == "%=")
         {
-            currentCfg->current_bb->add_IRInstr(IRInstr::copy, type, {tempRegs[2], exprResult});
+            currentCfg->current_bb->add_IRInstr(IRInstr::copy, type, {tempRegs[2], typedExprResult});
             currentCfg->current_bb->add_IRInstr(IRInstr::mod, type, {varName, varName, tempRegs[2]});
         }
 
-        if (exprSymbol->isConstant()) {
+        if (findVariable(typedExprResult)->isConstant()) {
             freeLastTempVariable(1);
         }
     }
@@ -339,28 +326,24 @@ antlrcpp::Any CodeGenVisitor::visitReturn_stmt(ifccParser::Return_stmtContext *c
     }
 
     // Évalue l'expression de retour
-    std::string exprResult = any_cast<std::string>(this->visit(ctx->expr()));
-    Symbol *exprSymbol = findVariable(exprResult);
-
     VarType funcReturnType = currentCfg->ast->getType();
-    if (!SymbolTable::isTypeCompatible(exprSymbol->type, funcReturnType)) {
-        if (funcReturnType == VarType::VOID) {
-            FeedbackOutputFormat::showFeedbackOutput("error", "function " + currentCfg->ast->getName() + " can not return a value.");
-            exit(1);
-        }
-        FeedbackOutputFormat::showFeedbackOutput("error", "type mismatch for function " + currentCfg->ast->getName() + ". Expected " + Symbol::getTypeStr(funcReturnType) + ", got " + Symbol::getTypeStr(exprSymbol->type));
+    if (funcReturnType == VarType::VOID) {
+        FeedbackOutputFormat::showFeedbackOutput("error", "function " + currentCfg->ast->getName() + " can not return a value.");
         exit(1);
     }
 
-    currentCfg->current_bb->add_IRInstr(IRInstr::copy, funcReturnType, {returnReg, exprResult});
+    std::string exprResult = any_cast<std::string>(this->visit(ctx->expr()));
+    string typedExprResult = this->implicitConversion(exprResult, funcReturnType);
 
-    if (exprSymbol->isConstant()) {
+    currentCfg->current_bb->add_IRInstr(IRInstr::copy, funcReturnType, {returnReg, typedExprResult});
+
+    if (findVariable(typedExprResult)->isConstant()) {
         freeLastTempVariable(1);
     }
     
     // Ajoute un saut vers l'épilogue
     currentCfg->current_bb->add_IRInstr(IRInstr::jmp, VarType::INT, {currentCfg->get_epilogue_label()});
-    return exprResult;
+    return 0;
 }
 
 // ==============================================================
@@ -382,15 +365,18 @@ antlrcpp::Any CodeGenVisitor::visitAddSubExpression(ifccParser::AddSubExpression
         op = IRInstr::Operation::sub;
     }
 
+    VarType type = getTypeExpr(left, right);
+    string leftTyped = this->implicitConversion(left, type);
+    string rightTyped = this->implicitConversion(right, type);
+
     // Verifie si les deux opérandes sont des constantes
-    std::string constOpt = constantOptimizeBinaryOp(left, right, op);
+    std::string constOpt = constantOptimizeBinaryOp(leftTyped, rightTyped, op);
     if ( constOpt != NOT_CONST_OPTI) {
         return constOpt;
     }
-
-    VarType type = getTypeExpr(left, right);
+    
     string tmp = currentCfg->currentScope->addTempVariable(type);
-    currentCfg->current_bb->add_IRInstr(op, type, {tmp, left, right});
+    currentCfg->current_bb->add_IRInstr(op, type, {tmp, leftTyped, rightTyped});
     return tmp;
 }
 
@@ -398,6 +384,8 @@ antlrcpp::Any CodeGenVisitor::visitMulDivExpression(ifccParser::MulDivExpression
 {
     string left = any_cast<string>(visit(ctx->expr(0)));
     string right = any_cast<string>(visit(ctx->expr(1)));
+
+    VarType type = getTypeExpr(left, right);
 
     IRInstr::Operation op;
     if (ctx->OPM()->getText() == "*")
@@ -410,23 +398,30 @@ antlrcpp::Any CodeGenVisitor::visitMulDivExpression(ifccParser::MulDivExpression
     }
     else if (ctx->OPM()->getText() == "%")
     {
+        if (Symbol::isFloatingType(type))
+        {
+            FeedbackOutputFormat::showFeedbackOutput("error", "mod operator is not supported for float type");
+            exit(1);
+        }
         op = IRInstr::Operation::mod;
     }
 
+    string leftTyped = this->implicitConversion(left, type);
+    string rightTyped = this->implicitConversion(right, type);
+
     // Verifie si les deux opérandes sont des constantes
-    std::string constOpt = constantOptimizeBinaryOp(left, right, op);
+    std::string constOpt = constantOptimizeBinaryOp(leftTyped, rightTyped, op);
     if ( constOpt != NOT_CONST_OPTI) {
         return constOpt;
     }
     
-    VarType type = getTypeExpr(left, right);
     string tmp = currentCfg->currentScope->addTempVariable(type);
     if (op == IRInstr::Operation::div || op == IRInstr::Operation::mod)
     {
-        currentCfg->current_bb->add_IRInstr(IRInstr::copy, type, {tempRegs[2], right});
-        currentCfg->current_bb->add_IRInstr(op, type, {tmp, left, tempRegs[2]});
+        currentCfg->current_bb->add_IRInstr(IRInstr::copy, type, {tempRegs[2], rightTyped});
+        currentCfg->current_bb->add_IRInstr(op, type, {tmp, leftTyped, tempRegs[2]});
     } else {
-        currentCfg->current_bb->add_IRInstr(op, type, {tmp, left, right});
+        currentCfg->current_bb->add_IRInstr(op, type, {tmp, leftTyped, rightTyped});
     }
     return tmp;
 }
@@ -434,7 +429,14 @@ antlrcpp::Any CodeGenVisitor::visitMulDivExpression(ifccParser::MulDivExpression
 antlrcpp::Any CodeGenVisitor::visitConstantExpression(ifccParser::ConstantExpressionContext *ctx)
 {
     int value = std::stoi(ctx->CONST()->getText());
-    string temp = addTempConstVariable(VarType::INT, value);
+    string temp = addTempConstVariable(VarType::INT, to_string(value));
+    return temp;
+}
+
+antlrcpp::Any CodeGenVisitor::visitConstantDoubleExpression(ifccParser::ConstantDoubleExpressionContext *ctx)
+{
+    double value = std::stod(ctx->CONST_DOUBLE()->getText());
+    string temp = addTempConstVariable(VarType::FLOAT, to_string(value));
     return temp;
 }
 
@@ -442,9 +444,8 @@ antlrcpp::Any CodeGenVisitor::visitConstantCharExpression(ifccParser::ConstantCh
 {
     // Traitement des constantes de type char (par exemple, 'a')
     string value = ctx->CONST_CHAR()->getText().substr(1, 1);
-    int ascii = (int)value[0];
     // Crée une variable temporaire et charge la constante dedans.
-    string temp = addTempConstVariable(VarType::CHAR, ascii);
+    string temp = addTempConstVariable(VarType::CHAR, to_string((int)value[0]));
     return temp;
 }
 
@@ -459,8 +460,8 @@ antlrcpp::Any CodeGenVisitor::visitConstantStringExpression(ifccParser::Constant
     string temp = currentCfg->currentScope->addTempVariable(VarType::CHAR_PTR, size);
     for (int i = 0; i < size; i++)
     {
-        string tempChar = currentCfg->currentScope->addTempConstVariable(VarType::CHAR, (int)value[i]);
-        string tempPos = currentCfg->currentScope->addTempConstVariable(VarType::INT, i);
+        string tempChar = currentCfg->currentScope->addTempConstVariable(VarType::CHAR, to_string((int)value[i]));
+        string tempPos = currentCfg->currentScope->addTempConstVariable(VarType::INT, to_string(i));
         currentCfg->current_bb->add_IRInstr(IRInstr::copyTblx, VarType::CHAR_PTR, {temp, tempChar, tempPos});
     }
     return temp;
@@ -494,7 +495,8 @@ antlrcpp::Any CodeGenVisitor::visitComparisonExpression(ifccParser::ComparisonEx
     string right = any_cast<string>(this->visit(ctx->expr(1)));
 
     VarType type = getTypeExpr(left, right);
-    string temp = currentCfg->currentScope->addTempVariable(type);
+    string leftTyped = this->implicitConversion(left, type);
+    string rightTyped = this->implicitConversion(right, type);
 
     string op = ctx->op->getText();
     IRInstr::Operation cmpOp;
@@ -513,12 +515,13 @@ antlrcpp::Any CodeGenVisitor::visitComparisonExpression(ifccParser::ComparisonEx
     }
 
     // Verifie si les deux opérandes sont des constantes
-    std::string constOpt = constantOptimizeBinaryOp(left, right, cmpOp);
+    std::string constOpt = constantOptimizeBinaryOp(leftTyped, rightTyped, cmpOp);
     if ( constOpt != NOT_CONST_OPTI) {
         return constOpt;
     }
 
-    currentCfg->current_bb->add_IRInstr(cmpOp, type, {temp, left, right});
+    string temp = currentCfg->currentScope->addTempVariable(VarType::INT); // result of comparison is int
+    currentCfg->current_bb->add_IRInstr(cmpOp, type, {temp, leftTyped, rightTyped});
     return temp;
 }
 
@@ -529,7 +532,10 @@ antlrcpp::Any CodeGenVisitor::visitBitwiseExpression(ifccParser::BitwiseExpressi
     string right = any_cast<string>(this->visit(ctx->expr(1)));
     
     VarType type = getTypeExpr(left, right);
-    string temp = currentCfg->currentScope->addTempVariable(type);
+    if (type == VarType::FLOAT || type == VarType::CHAR_PTR || type == VarType::INT_PTR) {
+        FeedbackOutputFormat::showFeedbackOutput("error", "bitwise operator is not supported for " + Symbol::getTypeStr(type) + " type.");
+        exit(1);
+    }
 
     string op = ctx->op->getText();
     IRInstr::Operation bitOp;
@@ -547,6 +553,7 @@ antlrcpp::Any CodeGenVisitor::visitBitwiseExpression(ifccParser::BitwiseExpressi
         return constOpt;
     }
 
+    string temp = currentCfg->currentScope->addTempVariable(type);
     currentCfg->current_bb->add_IRInstr(bitOp, type, {temp, left, right});
     return temp;
 }
@@ -558,23 +565,30 @@ antlrcpp::Any CodeGenVisitor::visitUnaryExpression(ifccParser::UnaryExpressionCo
     Symbol *exprSymbol = findVariable(expr);
 
     VarType type = exprSymbol->type;
-    string temp = currentCfg->currentScope->addTempVariable(type);
+    string labelDataForFloatUnary = "";
 
     string op = ctx->op->getText();
     IRInstr::Operation unaryOp;
     if (op == "-") {
         unaryOp = IRInstr::unary_minus;
+        if (type == VarType::FLOAT) {
+            labelDataForFloatUnary = rodm->getLabelDataForUnaryOp();
+        }
     } else if (op == "!") {
         unaryOp = IRInstr::not_op;
+        type = VarType::INT; // Le résultat d'une opération NOT est toujours un entier
     }
 
+    string typedExpr = this->implicitConversion(expr, type);
+
     // Verifie si l'opérande est une constante
-    std::string constOpt = constantOptimizeUnaryOp(expr, unaryOp);
+    std::string constOpt = constantOptimizeUnaryOp(typedExpr, unaryOp);
     if (constOpt != NOT_CONST_OPTI) {
         return constOpt;
     }
 
-    currentCfg->current_bb->add_IRInstr(unaryOp, type, {temp, expr});
+    string temp = currentCfg->currentScope->addTempVariable(type);
+    currentCfg->current_bb->add_IRInstr(unaryOp, type, {temp, typedExpr, labelDataForFloatUnary});
 
     return temp;
 }
@@ -592,7 +606,12 @@ antlrcpp::Any CodeGenVisitor::visitPostIncrementExpression(ifccParser::PostIncre
         exit(1);
     }
 
-    currentCfg->current_bb->add_IRInstr(IRInstr::incr, var->type, {varName});
+    VarType type = var->type;
+    string oneLabelData = "";
+    if (type == VarType::FLOAT) {
+        oneLabelData = rodm->putFloatIfNotExists(1.0);
+    }
+    currentCfg->current_bb->add_IRInstr(IRInstr::incr, var->type, {varName, oneLabelData});
     return 0;
 }
 
@@ -609,7 +628,13 @@ antlrcpp::Any CodeGenVisitor::visitPostDecrementExpression(ifccParser::PostDecre
         exit(1);
     }
 
-    currentCfg->current_bb->add_IRInstr(IRInstr::decr, var->type, {varName});
+    VarType type = var->type;
+    string oneLabelData = "";
+    if (type == VarType::FLOAT) {
+        oneLabelData = rodm->putFloatIfNotExists(1.0);
+    }
+
+    currentCfg->current_bb->add_IRInstr(IRInstr::decr, var->type, {varName, oneLabelData});
     return 0;
 }
 
@@ -679,15 +704,9 @@ antlrcpp::Any CodeGenVisitor::visitFunctionCallExpression(ifccParser::FunctionCa
         }
 
         // Check if the argument type matches the function parameter type
-        std::string arg = argsExpr[i];
-        Symbol *argSymbol = findVariable(arg);
-        if (!SymbolTable::isTypeCompatible(argSymbol->type, funcArgTypes[i]))
-        {
-            FeedbackOutputFormat::showFeedbackOutput("error", "type mismatch for argument " + std::to_string(i+1) + " of function " + funcName + ". Expected " + Symbol::getTypeStr(funcArgTypes[i]) + ", got " + Symbol::getTypeStr(argSymbol->type) + ".");
-            exit(1);
-        }
-
-        currentCfg->current_bb->add_IRInstr(IRInstr::copy, funcArgTypes[i], {argRegs[i], arg});
+        string arg = argsExpr[i];
+        string argTyped = this->implicitConversion(arg, funcArgTypes[i]);
+        currentCfg->current_bb->add_IRInstr(IRInstr::copy, funcArgTypes[i], {argRegs[i], argTyped});
     }
 
     VarType funcReturnType = funcDef->getType();
@@ -704,6 +723,10 @@ antlrcpp::Any CodeGenVisitor::visitLogiqueParesseuxExpression(ifccParser::Logiqu
     string right = any_cast<string>(this->visit(ctx->expr(1)));
     
     VarType type = getTypeExpr(left, right);
+    if (type == VarType::FLOAT) {
+        FeedbackOutputFormat::showFeedbackOutput("error", "logical operator is not supported for " + Symbol::getTypeStr(type) + " type.");
+        exit(1);
+    }
     string temp = currentCfg->currentScope->addTempVariable(type);
 
     string op = ctx->op->getText();
@@ -845,23 +868,21 @@ std::string CodeGenVisitor::constantOptimizeBinaryOp(std::string &left, std::str
     Symbol *leftSymbol = findVariable(left);
     Symbol *rightSymbol = findVariable(right);
 
-    if (leftSymbol->isConstant() && rightSymbol->isConstant()) {
-        // Si les deux opérandes sont des constantes, on peut évaluer l'expression directement.
-        int resultValue = getConstantResultBinaryOp(leftSymbol->getCstValue(), rightSymbol->getCstValue(), op);
-        freeLastTempVariable(2);
+    if (!leftSymbol->isConstant() || !rightSymbol->isConstant()) return NOT_CONST_OPTI;
 
-        return addTempConstVariable(VarType::INT, resultValue);
-    } 
+    if (leftSymbol->type != VarType::INT || rightSymbol->type != VarType::INT) { //TODO: not supported for other types yet
+        return NOT_CONST_OPTI;
+    }
 
-    // if (leftSymbol->isConstant()) {
-    //     cfg->current_bb->add_IRInstr(IRInstr::ldconst, VarType::INT, { left, left });
-    // } 
+    // Si les deux opérandes sont des constantes, on peut évaluer l'expression directement.
+    int leftValue = stoi(leftSymbol->getCstValue());
+    int rightValue = stoi(rightSymbol->getCstValue());
+    int resultValue = getConstantResultBinaryOp(leftValue, rightValue, op);
+    freeLastTempVariable(2);
+
+    return addTempConstVariable(VarType::INT, to_string(resultValue));
+
     
-    // if (rightSymbol->isConstant()) {
-    //     cfg->current_bb->add_IRInstr(IRInstr::ldconst, VarType::INT, { right, right});
-    // }
-
-    return NOT_CONST_OPTI;
 }
 
 int CodeGenVisitor::getConstantResultBinaryOp(int leftValue, int rightValue, IRInstr::Operation op) {
@@ -914,15 +935,19 @@ std::string CodeGenVisitor::constantOptimizeUnaryOp(std::string &expr, IRInstr::
 
     if (exprSymbol->isConstant()) {
         // Si l'opérande est une constante, on peut évaluer l'expression directement.
-        int resultValue = getConstantResultUnaryOp(exprSymbol->getCstValue(), op);
+        if (exprSymbol->type != VarType::INT) { //TODO: add other types
+            return NOT_CONST_OPTI;
+        }
+
+        int resultValue = getConstantResultUnaryOp( stoi(exprSymbol->getCstValue()), op);
         freeLastTempVariable(1);
-        return addTempConstVariable(VarType::INT, resultValue);
+        return addTempConstVariable( VarType::INT, to_string(resultValue) );
     }
 
     return NOT_CONST_OPTI;
 }
 
-int CodeGenVisitor::getConstantResultUnaryOp(int cstValue, IRInstr::Operation op) {
+int CodeGenVisitor::getConstantResultUnaryOp(int cstValue,  IRInstr::Operation op) {
     switch (op) {
         case IRInstr::Operation::unary_minus:
             return -cstValue;
@@ -932,6 +957,61 @@ int CodeGenVisitor::getConstantResultUnaryOp(int cstValue, IRInstr::Operation op
             FeedbackOutputFormat::showFeedbackOutput("error", "unsupported operation for constant optimization.");
             exit(1);
     }
+}
+
+
+// ==============================================================
+//                     Implicit conversion
+// ==============================================================
+std::string CodeGenVisitor::implicitConversion(std::string &varName, VarType type) {
+    Symbol *var = findVariable(varName);
+    if (var == nullptr) {
+        FeedbackOutputFormat::showFeedbackOutput("error", "variable '" + varName + "' not declared");
+        exit(1);
+    }
+
+    if (var->isConstant()) {
+        if ( Symbol::isFloatingType(type) ) {
+            float value = std::stof(var->getCstValue());
+            var->label = rodm->putFloatIfNotExists(value);
+        }
+        var->type = type;
+        return varName;
+    }
+
+    if (var->type != type) {
+        std::string temp = currentCfg->currentScope->addTempVariable(type);
+
+        if ( Symbol::isIntegerType(var->type) && Symbol::isFloatingType(type) ) {
+            currentCfg->current_bb->add_IRInstr(IRInstr::intToFloat, type, {temp, varName});
+        }
+
+        else if ( Symbol::isFloatingType(var->type) && Symbol::isIntegerType(type) ) {
+            currentCfg->current_bb->add_IRInstr(IRInstr::floatToInt, type, {temp, varName});
+        }
+
+        else { 
+            currentCfg->current_bb->add_IRInstr(IRInstr::copy, type, {temp, varName});
+        }
+
+        return temp;
+    }
+    return varName;
+}
+
+VarType CodeGenVisitor::getTypeExpr(std::string &left, std::string &right) {
+    Symbol *leftSymbol = findVariable(left);
+    Symbol *rightSymbol = findVariable(right);
+
+    if (leftSymbol == nullptr || rightSymbol == nullptr) {
+        FeedbackOutputFormat::showFeedbackOutput("error", "variable not declared");
+        exit(1);
+    }
+
+    if (leftSymbol->type != rightSymbol->type) {
+        return Symbol::getHigherType(leftSymbol->type, rightSymbol->type);
+    }
+    return leftSymbol->type;
 }
 
 // ==============================================================
@@ -957,7 +1037,7 @@ void CodeGenVisitor::freeLastTempVariable(int nbVar = 1)
     }
 }
 
-std::string CodeGenVisitor::addTempConstVariable(VarType type, int value)
+std::string CodeGenVisitor::addTempConstVariable(VarType type, string value)
 {
     if (currentCfg != nullptr) {
         return currentCfg->currentScope->addTempConstVariable(type, value);
@@ -979,18 +1059,6 @@ void CodeGenVisitor::exitCurrentScope()
     // le block est finis, on synchronize le parent et ce scope; on revient vers scope de parent
     currentCfg->currentScope->getParent()->synchronize(currentCfg->currentScope);
     currentCfg->currentScope = currentCfg->currentScope->getParent();
-}
-
-VarType CodeGenVisitor::getTypeExpr(string left, string right) {
-    VarType leftType = findVariable(left)->type;
-    VarType rightType = findVariable(right)->type;
-
-    if (!SymbolTable::isTypeCompatible(leftType, rightType)) {
-        FeedbackOutputFormat::showFeedbackOutput("error", "type mismatch for addition/subtraction operation.");
-        exit(1);
-    }
-
-    return SymbolTable::getHigherType(leftType, rightType);
 }
 
 DefFonction* CodeGenVisitor::getAstFunction(std::string name)

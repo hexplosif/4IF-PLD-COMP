@@ -17,10 +17,9 @@ class SymbolTable
         Symbol addLocalVariable(std::string name, VarType type, int size = -1); //return offset
         Symbol addGlobalVariable(std::string name, VarType type);
         std::string addTempVariable(VarType type, int size = -1); //return name
-        std::string addTempConstVariable(VarType type, int value); //return name
+        std::string addTempConstVariable(VarType type, std::string value); //return name
 
         void freeLastTempVariable(); // free last temp variable
-
 
         Symbol* findVariable(std::string name); // find all var can see in the scope
         Symbol* findVariableThisScope(std::string name); //find only var in the scope
@@ -36,8 +35,6 @@ class SymbolTable
 
         void printTable();
         static bool isTempVariable(std::string name);
-        static VarType getHigherType(VarType type1, VarType type2);
-        static bool isTypeCompatible(VarType type1, VarType type2);
 
         void checkUnusedVariables();
 
