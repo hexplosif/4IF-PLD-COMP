@@ -63,7 +63,7 @@ type : 'int' | 'char' | 'float' ;
 
 VAR   : [a-zA-Z_][a-zA-Z_0-9]* ;  // Identifiants pour les variables
 CONST : [0-9]+ ;                 // Constantes entières
-CONST_DOUBLE : [0-9]+ '.' [0-9]+ ; // Constantes flottantes
+CONST_DOUBLE : [0-9]+ '.' [0-9]+ ('f')?; // Constantes flottantes
 CONST_CHAR : '\'' [ -~] '\'' ;
 CONST_STRING : '"' ([ -~])*? '"' ;
 

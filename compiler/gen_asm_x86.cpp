@@ -14,22 +14,24 @@ using namespace std;
 // that 32-bit value into the corresponding register (using the "d" suffix for the lower 32 bits).
 vector<string> argRegs = {"%edi", "%esi", "%edx", "%ecx", "%r8d", "%r9d"};
 vector<string> tempRegs = {"%eax", "%edx", "%ebx", "%ecx", "%esi", "%edi", "%e8d", "%e9d"}; // Temporary registers
+vector<string> floatRegs = {"%xmm0", "%xmm1", "%xmm2", "%xmm3", "%xmm4", "%xmm5", "%xmm6", "%xmm7"}; // Floating point registers
 string returnReg = "%eax"; // Register used for return value
+string floatReturnReg = "%xmm0"; // Register used for return value (float)
 
 
 bool isRegister(std::string &reg)
 {
-    return ( reg[0] == '%' && !reg.empty() );
+    return (!reg.empty() && reg[0] == '%' );
 }
 
 void move(std::ostream &o, VarType t, std::string src, std::string dest)
 {
     if (t == VarType::FLOAT)
     {
-        if (isRegister(src) && isRegister(dest))
-            o << "    movd " << src << ", " << dest << "\n";
-        else
-            o << "    movss " << src << ", " << dest << "\n";
+        // if (isRegister(src) && isRegister(dest))
+        //     o << "    movd " << src << ", " << dest << "\n";
+        // else
+        o << "    movss " << src << ", " << dest << "\n";
         return;
     }
     o << "    movl " << src << ", " << dest << "\n";
@@ -241,8 +243,8 @@ void IRInstr::gen_asm(std::ostream &o)
     case cmp_lt:
         // cmp_lt: params[0] = dest, params[1] = gauche, params[2] = droite
         if (t == VarType::FLOAT) {
-            move(o, t, params[1], "%xmm0");
-            o << "    comiss " << params[2] << ", %xmm0\n";
+            move(o, t, params[2], "%xmm0");
+            o << "    comiss " << params[1] << ", %xmm0\n";
             o << "    seta %al\n";
             o << "    movzbl %al, %eax\n";
             o << "    movl %eax, " << params[0] << "\n";
@@ -258,8 +260,8 @@ void IRInstr::gen_asm(std::ostream &o)
     case cmp_le:
         // cmp_le: params[0] = dest, params[1] = gauche, params[2] = droite
         if (t == VarType::FLOAT) {
-            move(o, t, params[1], "%xmm0");
-            o << "    comiss " << params[2] << ", %xmm0\n";
+            move(o, t, params[2], "%xmm0");
+            o << "    comiss " << params[1] << ", %xmm0\n";
             o << "    setnb %al\n";
             o << "    movzbl %al, %eax\n";
             o << "    movl %eax, " << params[0] << "\n";
@@ -451,9 +453,8 @@ void IRInstr::gen_asm(std::ostream &o)
         break;
 
     case call:
-        // call: params[0] = label, params[1] = destination, params[2]... = paramètres
+        // call: params[0] = label
         o << "    call " << params[0] << "\n";
-        o << "    movl %eax, " << params[1] << "\n";
         break;
 
     case jmp:
@@ -627,6 +628,7 @@ void RoDM::gen_asm(std::ostream &o)
     o << ".section .rodata" << std::endl;
     for (const auto &pair : floatData)
     {
+        o << "    .align 4" << std::endl;
         o << pair.first << ":" << "         // = " << pair.second << std::endl;
         std::string hexIEEEValue = floatToLong_Ieee754(pair.second);
 

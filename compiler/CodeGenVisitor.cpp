@@ -15,7 +15,9 @@ using namespace std;
 extern map<string, DefFonction*> predefinedFunctions; /**< map of all functions in the program */
 extern vector<string> argRegs;
 extern vector<string> tempRegs;
+extern vector<string> floatRegs;
 extern string returnReg;
+extern string floatReturnReg;
 
 antlrcpp::Any CodeGenVisitor::visitProg(ifccParser::ProgContext *ctx)
 {
@@ -67,8 +69,9 @@ antlrcpp::Any CodeGenVisitor::visitFunction_definition(ifccParser::Function_defi
             string paramName = param->VAR()->getText();
 
             VarType argType = Symbol::getTypeFromStr(type);
+            string argReg = Symbol::isIntegerType(argType) ? argRegs[i] : floatRegs[i];
             currentCfg->currentScope->addLocalVariable(paramName, argType); //TODO: modify to get the type of the params
-            currentCfg->current_bb->add_IRInstr(IRInstr::copy, argType, {paramName, argRegs[i]}); //TODO: modify to get the type of the params
+            currentCfg->current_bb->add_IRInstr(IRInstr::copy, argType, {paramName, argReg}); //TODO: modify to get the type of the params
             paramsTypes.push_back(argType);
         }
 
@@ -258,13 +261,15 @@ antlrcpp::Any CodeGenVisitor::visitAssignmentStatement(ifccParser::AssignmentSta
         }
         else if (op == "/=")
         {
-            currentCfg->current_bb->add_IRInstr(IRInstr::copy, type, {tempRegs[4], typedExprResult});
-            currentCfg->current_bb->add_IRInstr(IRInstr::divTblx, type, {varName, tempRegs[4], pos});
+            string tempReg = (type == VarType::FLOAT) ? floatRegs[1] : tempRegs[4];
+            currentCfg->current_bb->add_IRInstr(IRInstr::copy, type, {tempReg, typedExprResult});
+            currentCfg->current_bb->add_IRInstr(IRInstr::divTblx, type, {varName, tempReg, pos});
         }
         else if (op == "%=")
         {
-            currentCfg->current_bb->add_IRInstr(IRInstr::copy, type, {tempRegs[4], typedExprResult});
-            currentCfg->current_bb->add_IRInstr(IRInstr::modTblx, type, {varName, tempRegs[4], pos});
+            string tempReg = (type == VarType::FLOAT) ? floatRegs[1] : tempRegs[4];
+            currentCfg->current_bb->add_IRInstr(IRInstr::copy, type, {tempReg, typedExprResult});
+            currentCfg->current_bb->add_IRInstr(IRInstr::modTblx, type, {varName, tempReg, pos});
         }
 
         if (findVariable(typedExprResult)->isConstant()) {
@@ -294,13 +299,15 @@ antlrcpp::Any CodeGenVisitor::visitAssignmentStatement(ifccParser::AssignmentSta
         }
         else if (op == "/=")
         {
-            currentCfg->current_bb->add_IRInstr(IRInstr::copy, type, {tempRegs[2], typedExprResult});
-            currentCfg->current_bb->add_IRInstr(IRInstr::div, type, {varName, varName, tempRegs[2]});
+            string tempReg = (type == VarType::FLOAT) ? floatRegs[1] : tempRegs[2];
+            currentCfg->current_bb->add_IRInstr(IRInstr::copy, type, {tempReg, typedExprResult});
+            currentCfg->current_bb->add_IRInstr(IRInstr::div, type, {varName, varName, tempReg});
         }
         else if (op == "%=")
         {
-            currentCfg->current_bb->add_IRInstr(IRInstr::copy, type, {tempRegs[2], typedExprResult});
-            currentCfg->current_bb->add_IRInstr(IRInstr::mod, type, {varName, varName, tempRegs[2]});
+            string tempReg = (type == VarType::FLOAT) ? floatRegs[1] : tempRegs[2];
+            currentCfg->current_bb->add_IRInstr(IRInstr::copy, type, {tempReg, typedExprResult});
+            currentCfg->current_bb->add_IRInstr(IRInstr::mod, type, {varName, varName, tempReg});
         }
 
         if (findVariable(typedExprResult)->isConstant()) {
@@ -335,7 +342,8 @@ antlrcpp::Any CodeGenVisitor::visitReturn_stmt(ifccParser::Return_stmtContext *c
     std::string exprResult = any_cast<std::string>(this->visit(ctx->expr()));
     string typedExprResult = this->implicitConversion(exprResult, funcReturnType);
 
-    currentCfg->current_bb->add_IRInstr(IRInstr::copy, funcReturnType, {returnReg, typedExprResult});
+    string funcReturnReg = (funcReturnType == VarType::FLOAT) ? floatReturnReg : returnReg;
+    currentCfg->current_bb->add_IRInstr(IRInstr::copy, funcReturnType, {funcReturnReg, typedExprResult});
 
     if (findVariable(typedExprResult)->isConstant()) {
         freeLastTempVariable(1);
@@ -418,8 +426,9 @@ antlrcpp::Any CodeGenVisitor::visitMulDivExpression(ifccParser::MulDivExpression
     string tmp = currentCfg->currentScope->addTempVariable(type);
     if (op == IRInstr::Operation::div || op == IRInstr::Operation::mod)
     {
-        currentCfg->current_bb->add_IRInstr(IRInstr::copy, type, {tempRegs[2], rightTyped});
-        currentCfg->current_bb->add_IRInstr(op, type, {tmp, leftTyped, tempRegs[2]});
+        string tempReg = (type == VarType::FLOAT) ? floatRegs[1] : tempRegs[2];
+        currentCfg->current_bb->add_IRInstr(IRInstr::copy, type, {tempReg, rightTyped});
+        currentCfg->current_bb->add_IRInstr(op, type, {tmp, leftTyped, tempReg});
     } else {
         currentCfg->current_bb->add_IRInstr(op, type, {tmp, leftTyped, rightTyped});
     }
@@ -694,7 +703,7 @@ antlrcpp::Any CodeGenVisitor::visitFunctionCallExpression(ifccParser::FunctionCa
 
     vector<VarType> funcArgTypes = funcDef->getParameters();
     int funcArgCount = funcArgTypes.size();
-    for (size_t i = 0; i < args.size(); i++)
+    for (int i = args.size() - 1; i >= 0; i--)
     {
         // Check if the number of arguments is correct
         if (i >= funcArgCount)
@@ -706,12 +715,16 @@ antlrcpp::Any CodeGenVisitor::visitFunctionCallExpression(ifccParser::FunctionCa
         // Check if the argument type matches the function parameter type
         string arg = argsExpr[i];
         string argTyped = this->implicitConversion(arg, funcArgTypes[i]);
-        currentCfg->current_bb->add_IRInstr(IRInstr::copy, funcArgTypes[i], {argRegs[i], argTyped});
+        string argReg = Symbol::isIntegerType(funcArgTypes[i]) ? argRegs[i] : floatRegs[i];
+        currentCfg->current_bb->add_IRInstr(IRInstr::copy, funcArgTypes[i], {argReg, argTyped});
     }
 
     VarType funcReturnType = funcDef->getType();
     string temp = currentCfg->currentScope->addTempVariable(funcReturnType);
     currentCfg->current_bb->add_IRInstr(IRInstr::call, funcReturnType, {funcName, temp});
+
+    string funcReturnReg = (funcReturnType == VarType::FLOAT) ? floatReturnReg : returnReg;
+    currentCfg->current_bb->add_IRInstr(IRInstr::copy, funcReturnType, {temp, funcReturnReg});
 
     return temp;
 }
@@ -727,7 +740,7 @@ antlrcpp::Any CodeGenVisitor::visitLogiqueParesseuxExpression(ifccParser::Logiqu
         FeedbackOutputFormat::showFeedbackOutput("error", "logical operator is not supported for " + Symbol::getTypeStr(type) + " type.");
         exit(1);
     }
-    string temp = currentCfg->currentScope->addTempVariable(type);
+
 
     string op = ctx->op->getText();
     IRInstr::Operation logOp;
@@ -746,6 +759,7 @@ antlrcpp::Any CodeGenVisitor::visitLogiqueParesseuxExpression(ifccParser::Logiqu
         return constOpt;
     }
 
+    string temp = currentCfg->currentScope->addTempVariable(type);
     currentCfg->current_bb->add_IRInstr(logOp, type, {temp, left, right});
 
     return temp;
@@ -868,7 +882,7 @@ std::string CodeGenVisitor::constantOptimizeBinaryOp(std::string &left, std::str
     Symbol *leftSymbol = findVariable(left);
     Symbol *rightSymbol = findVariable(right);
 
-    if (!leftSymbol->isConstant() || !rightSymbol->isConstant()) return NOT_CONST_OPTI;
+    if (!(leftSymbol->isConstant() && rightSymbol->isConstant())) return NOT_CONST_OPTI;
 
     if (leftSymbol->type != VarType::INT || rightSymbol->type != VarType::INT) { //TODO: not supported for other types yet
         return NOT_CONST_OPTI;
@@ -881,8 +895,6 @@ std::string CodeGenVisitor::constantOptimizeBinaryOp(std::string &left, std::str
     freeLastTempVariable(2);
 
     return addTempConstVariable(VarType::INT, to_string(resultValue));
-
-    
 }
 
 int CodeGenVisitor::getConstantResultBinaryOp(int leftValue, int rightValue, IRInstr::Operation op) {
@@ -967,6 +979,16 @@ std::string CodeGenVisitor::implicitConversion(std::string &varName, VarType typ
     Symbol *var = findVariable(varName);
     if (var == nullptr) {
         FeedbackOutputFormat::showFeedbackOutput("error", "variable '" + varName + "' not declared");
+        exit(1);
+    }
+
+    if (type == VarType::VOID) {
+        FeedbackOutputFormat::showFeedbackOutput("error", "cannot convert from " + Symbol::getTypeStr(var->type) + " to void");
+        exit(1);
+    }
+
+    if (var->type == VarType::VOID) {
+        FeedbackOutputFormat::showFeedbackOutput("error", "cannot convert from void to " + Symbol::getTypeStr(type));
         exit(1);
     }
 
