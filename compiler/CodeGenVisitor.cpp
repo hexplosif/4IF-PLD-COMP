@@ -989,13 +989,14 @@ float CodeGenVisitor::getFloatConstantResultBinaryOp(float leftValue, float righ
 std::string CodeGenVisitor::constantOptimizeUnaryOp(std::string &expr, IRInstr::Operation op) {
     //TODO: only support int for now, add other types later
     Symbol *exprSymbol = findVariable(expr);
+    VarType type = exprSymbol->type;
 
     if (!exprSymbol->isConstant()) return NOT_CONST_OPTI;
 
     // Si l'opérande est une constante, on peut évaluer l'expression directement.
     string strResultValue = "";
 
-    if (Symbol::isFloatingType(exprSymbol->type)) {
+    if (Symbol::isFloatingType(type)) {
         float resultValue = getFloatConstantResultUnaryOp(stof(exprSymbol->getCstValue()), op);
         strResultValue = to_string(resultValue);
     }
@@ -1006,7 +1007,7 @@ std::string CodeGenVisitor::constantOptimizeUnaryOp(std::string &expr, IRInstr::
     }
 
     freeLastTempVariable(1);
-    return addTempConstVariable( exprSymbol->type, strResultValue );
+    return addTempConstVariable( type, strResultValue );
 }
 
 int CodeGenVisitor::getIntConstantResultUnaryOp(int cstValue,  IRInstr::Operation op) {

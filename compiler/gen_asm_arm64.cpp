@@ -15,7 +15,10 @@ using namespace std;
 vector<string> argRegs = {"w0", "w1", "w2", "w3", "w4", "w5", "w6", "w7"};
 // General purpose temporary registers (caller-saved)
 vector<string> tempRegs = {"w0", "w1", "w2", "w3", "w4", "w5", "w6", "w7", "w8", "w9", "w10", "w11"};
+// Floating point registers (caller-saved)
+vector<string> floatRegs = {"s0", "s1", "s2", "s3", "s4", "s5", "s6", "s7"};
 string returnReg = "w0"; // Register used for return value
+string floatReturnReg = "s0"; // Register used for return value (float)
 
 bool is_cst(const std::string& s) {
     return !s.empty() && s[0] == '#';
@@ -26,11 +29,31 @@ bool is_memory(const std::string& s) {
 }
 
 bool is_register(const std::string& s) {
-    return !s.empty() && s[0] == 'w' && std::all_of(s.begin() + 1, s.end(), ::isdigit);
+    return !s.empty() && (s[0] == 'w' || s[0] == 's') && std::all_of(s.begin() + 1, s.end(), ::isdigit);
 }
 
 bool is_global(const std::string& s) {
     return !s.empty() && s[0] == '_';
+}
+
+bool is_memory_big_offset(const std::string& s) {
+    return (!s.empty()) && (s.size() > 3) && s[0] == ';' && s[1] == ';' && s[2] == ';' && s[3] == '[' && s.back() == ']';
+}
+
+std::string get_memory_offset(const std::string& s) {
+    // s = ;;;[<reg>,#-<offset>]
+    // Extract the offset from the memory address
+    size_t start = s.find(',') + 4;
+    size_t end = s.find(']');
+    return s.substr(start, end - start);
+}
+
+std::string get_memory_register(const std::string& s) {
+    // s = ;;;[<reg>,#<offset>]
+    // Extract the register from the memory address
+    size_t start = s.find('[') + 1; // Skip ;;;[
+    size_t end = s.find(',');
+    return s.substr(start, end - start);
 }
 
 void move(std::ostream &o, const std::string& src, const std::string& dest) {
@@ -66,8 +89,35 @@ void move(std::ostream &o, const std::string& src, const std::string& dest) {
         if (is_register(dest)) {
             o << "    adrp	x8, " << src << "@PAGE\n";
             o << "    ldr " << dest << ", [x8, " << src << "@PAGEOFF]" << "\n";
-        } else {
-            o << "    ; Unsupported move operation: " << src << " to " << dest << "\n";
+        }
+    } else {
+        o << "    ; Unsupported move operation: " << src << " to " << dest << "\n";
+    }
+}
+
+void fmove(std::ostream &o, const std::string& src, const std::string& dest) {
+    if (is_register(src)) {
+        if (is_register(dest)) {
+            o << "    fmov " << dest << ", " << src << "\n";
+        } else if (is_memory(dest)) {
+            o << "    str " << src << ", " << dest << "\n";
+        }
+    } else if (is_memory(src)) {
+        if (is_register(dest)) {
+            o << "    ldr " << dest << ", " << src << "\n";
+        } else if (is_memory(dest)) {
+            o << "    ldr w9, " << src << "\n"; // Load into a temporary register
+            o << "    str w9, " << dest << "\n"; // Store into destination memory
+        }
+    } else if (is_cst(src)) {
+        if (is_register(dest)) {
+            o << "    fmov " << dest << ", " << src << "\n";
+        }
+    } else if (is_global(src)) {
+        if (is_register(dest)) {
+            o << "    adrp	x8, " << src << "@PAGE\n";
+            o << "    ldr w1, [x8, " << src << "@PAGEOFF]" << "\n";
+            o << "    fmov " << dest << ", w1\n";
         }
     } else {
         o << "    ; Unsupported move operation: " << src << " to " << dest << "\n";
@@ -78,6 +128,17 @@ void IRInstr::gen_asm(std::ostream &o)
 {
     static int labelCounter = 0;
 
+    for (int i = 0; i < params.size(); i++) {
+        if (is_memory_big_offset(params[i])) {
+            // cout << "; Memory address with big offset: " << params[i] << "-> [x" << i + 2 << "]" << endl;
+            std::string offset = get_memory_offset(params[i]);
+            std::string reg = get_memory_register(params[i]);
+
+            o << "    sub x" << i + 6 << ", " << reg << ", #" << offset << "\n"; // Calculate the address
+            params[i] = std::string("[x") + std::to_string(i + 6) + "]"; // Update the parameter to use the calculated address
+        }
+    }
+
     switch (op)
     {
     case ldconst:
@@ -87,35 +148,78 @@ void IRInstr::gen_asm(std::ostream &o)
         break;
     case copy:
         // copy: params[0] = destination (memory), params[1] = source (memory or immediate)
+        if (t == VarType::FLOAT) {
+            fmove(o, params[1], "s0");
+            fmove(o, "s0", params[0]);
+            break;
+        }
+
         move(o, params[1], "w9"); // Move source to w0
         move(o, "w9", params[0]); // Move w0 to destination
         break;
     case add:
         // add: params[0] = dest (mem), params[1] = left (mem/imm), params[2] = right (mem/imm)
+        if (t == VarType::FLOAT) {
+            fmove(o, params[1], "s0");
+            fmove(o, params[2], "s1");
+            o << "    fadd s0, s0, s1\n";
+            fmove(o, "s0", params[0]); // Move s0 to destination
+            break;
+        }
+
         move(o, params[1], "w0");
         move(o, params[2], "w1");
         o << "    add w0, w0, w1\n";
         move(o, "w0", params[0]); // Move w0 to destination
         break;
     case sub:
+        // sub: params[0] = dest (mem), params[1] = left (mem/imm), params[2] = right (mem/imm)
+        if (t == VarType::FLOAT) {
+            fmove(o, params[1], "s0");
+            fmove(o, params[2], "s1");
+            o << "    fsub s0, s0, s1\n";
+            fmove(o, "s0", params[0]); // Move s0 to destination
+            break;
+        }
+
         move(o, params[1], "w0");
         move(o, params[2], "w1");
         o << "    sub w0, w0, w1\n";
         move(o, "w0", params[0]); // Move w0 to destination
         break;
     case mul:
+        // mul: params[0] = dest (mem), params[1] = left (mem/imm), params[2] = right (mem/imm)
+        if (t == VarType::FLOAT) {
+            fmove(o, params[1], "s0");
+            fmove(o, params[2], "s1");
+            o << "    fmul s0, s0, s1\n";
+            fmove(o, "s0", params[0]); // Move s0 to destination
+            break;
+        }
+
         move(o, params[1], "w0");
         move(o, params[2], "w1");
         o << "    mul w0, w0, w1\n";
         move(o, "w0", params[0]); // Move w0 to destination
         break;
     case div:
+        // div: params[0] = dest (mem), params[1] = left (mem/imm), params[2] = right (mem/imm)
+        if (t == VarType::FLOAT) {
+            fmove(o, params[1], "s0");
+            fmove(o, params[2], "s1");
+            o << "    fdiv s0, s0, s1\n";
+            fmove(o, "s0", params[0]); // Move s0 to destination
+            break;
+        }
+
         move(o, params[1], "w0");
         move(o, params[2], "w1");
         o << "    sdiv w0, w0, w1\n"; // Signed division
         move(o, "w0", params[0]); // Move w0 to destination
         break;
     case mod:
+        // mod: params[0] = dest (mem), params[1] = left (mem/imm), params[2] = right (mem/imm)
+
         move(o, params[1], "w0"); // dividend
         move(o, params[2], "w1"); // divisor
         o << "    sdiv w2, w0, w1\n";   // quotient in w2
@@ -203,6 +307,14 @@ void IRInstr::gen_asm(std::ostream &o)
     }
     case incr:
         // incr: params[0] = var (memory)
+        if (t == VarType::FLOAT) {
+            fmove(o, params[0], "s0");
+            fmove(o, "#1.00000000", "s1");
+            o << "    fadd s0, s0, s1\n";
+            fmove(o, "s0", params[0]); // Move s0 to destination
+            break;
+        }
+
         move(o, params[0], "w0"); // Load variable into w0
         o << "    add w0, w0, #1\n";
         move(o, "w0", params[0]); // Move w0 to destination
@@ -210,12 +322,31 @@ void IRInstr::gen_asm(std::ostream &o)
 
     case decr:
         // decr: params[0] = var (memory)
+        if (t == VarType::FLOAT) {
+            fmove(o, params[0], "s0");
+            fmove(o, "#1.00000000", "s1");
+            o << "    fsub s0, s0, s1\n";
+            fmove(o, "s0", params[0]); // Move s0 to destination
+            break;
+        }
+
         move(o, params[0], "w0"); // Load variable into w0
         o << "    sub w0, w0, #1\n";
         move(o, "w0", params[0]); // Move w0 to destination
         break;
 
     case cmp_eq: // ==
+        // cmp_eq: params[0] = destination, params[1] = left (mem/imm), params[2] = right (mem/imm)
+        if (t == VarType::FLOAT) {
+            fmove(o, params[1], "s0");
+            fmove(o, params[2], "s1");
+            o << "    fcmp s0, s1\n";
+            o << "    cset w8, eq\n"; // Set w0 to 1 if eq, 0 otherwise
+            o << "    and w8, w8, #0x1\n"; // Mask to get the result
+            move(o, "w8", params[0]); // Move w0 to destination
+            break;
+        }
+
         move(o, params[1], "w0");
         move(o, params[2], "w1");
         o << "    cmp w0, w1\n";
@@ -223,14 +354,37 @@ void IRInstr::gen_asm(std::ostream &o)
         move(o, "w0", params[0]); // Move w0 to destination
         break;
     case cmp_lt: // <
+        // cmp_lt: params[0] = destination, params[1] = left (mem/imm), params[2] = right (mem/imm)
+        if (t == VarType::FLOAT) {
+            fmove(o, params[1], "s0");
+            fmove(o, params[2], "s1");
+            o << "    fcmp s0, s1\n";
+            o << "    cset w8, mi\n"; // Set w0 to 1 if lt, 0 otherwise
+            o << "    and w8, w8, #0x1\n"; // Mask to get the result
+            move(o, "w8", params[0]); // Move w0 to destination
+            break;
+        }
+
         move(o, params[1], "w0");
         move(o, params[2], "w1");
         o << "    cmp w0, w1\n";
         o << "    cset w0, lt\n"; // Set w0 to 1 if lt, 0 otherwise
         move(o, "w0", params[0]); // Move w0 to destination
         break;
+
     case cmp_le: // <=
-         move(o, params[1], "w0");
+        // cmp_le: params[0] = destination, params[1] = left (mem/imm), params[2] = right (mem/imm)
+        if (t == VarType::FLOAT) {
+            fmove(o, params[1], "s0");
+            fmove(o, params[2], "s1");
+            o << "    fcmp s0, s1\n";
+            o << "    cset w8, ls\n"; // Set w0 to 1 if le, 0 otherwise
+            o << "    and w8, w8, #0x1\n"; // Mask to get the result
+            move(o, "w8", params[0]); // Move w0 to destination
+            break;
+        }
+
+        move(o, params[1], "w0");
         move(o, params[2], "w1");
         o << "    cmp w0, w1\n";
         o << "    cset w0, le\n"; // Set w0 to 1 if le, 0 otherwise
@@ -238,6 +392,17 @@ void IRInstr::gen_asm(std::ostream &o)
         break;
 
     case cmp_ne: // !=
+        // cmp_ne: params[0] = destination, params[1] = left (mem/imm), params[2] = right (mem/imm)
+        if (t == VarType::FLOAT) {
+            fmove(o, params[1], "s0");
+            fmove(o, params[2], "s1");
+            o << "    fcmp s0, s1\n";
+            o << "    cset w8, ne\n"; // Set w0 to 1 if ne, 0 otherwise
+            o << "    and w8, w8, #0x1\n"; // Mask to get the result
+            move(o, "w8", params[0]); // Move w0 to destination
+            break;
+        }
+
         move(o, params[1], "w0");
         move(o, params[2], "w1");
         o << "    cmp w0, w1\n";
@@ -246,7 +411,18 @@ void IRInstr::gen_asm(std::ostream &o)
         break;
 
     case cmp_gt: // >
-         move(o, params[1], "w0");
+        // cmp_gt: params[0] = destination, params[1] = left (mem/imm), params[2] = right (mem/imm)
+        if (t == VarType::FLOAT) {
+            fmove(o, params[1], "s0");
+            fmove(o, params[2], "s1");
+            o << "    fcmp s0, s1\n";
+            o << "    cset w8, gt\n"; // Set w0 to 1 if gt, 0 otherwise
+            o << "    and w8, w8, #0x1\n"; // Mask to get the result
+            move(o, "w8", params[0]); // Move w0 to destination
+            break;
+        }
+
+        move(o, params[1], "w0");
         move(o, params[2], "w1");
         o << "    cmp w0, w1\n";
         o << "    cset w0, gt\n"; // Set w0 to 1 if gt, 0 otherwise
@@ -254,7 +430,18 @@ void IRInstr::gen_asm(std::ostream &o)
         break;
 
     case cmp_ge: // >=
-         move(o, params[1], "w0");
+        // cmp_ge: params[0] = destination, params[1] = left (mem/imm), params[2] = right (mem/imm)
+        if (t == VarType::FLOAT) {
+            fmove(o, params[1], "s0");
+            fmove(o, params[2], "s1");
+            o << "    fcmp s0, s1\n";
+            o << "    cset w8, ge\n"; // Set w0 to 1 if ge, 0 otherwise
+            o << "    and w8, w8, #0x1\n"; // Mask to get the result
+            move(o, "w8", params[0]); // Move w0 to destination
+            break;
+        }
+
+        move(o, params[1], "w0");
         move(o, params[2], "w1");
         o << "    cmp w0, w1\n";
         o << "    cset w0, ge\n"; // Set w0 to 1 if ge, 0 otherwise
@@ -262,6 +449,7 @@ void IRInstr::gen_asm(std::ostream &o)
         break;
 
     case bit_and:
+        // bit_and: params[0] = dest (mem), params[1] = left (mem/imm), params[2] = right (mem/imm)
         move(o, params[1], "w0");
         move(o, params[2], "w1");
         o << "    and w0, w0, w1\n";
@@ -283,6 +471,14 @@ void IRInstr::gen_asm(std::ostream &o)
         break;
 
     case unary_minus:
+        // unary_minus: params[0] = destination, params[1] = source (mem/imm)
+        if (t == VarType::FLOAT) {
+            fmove(o, params[1], "s0");
+            o << "    fneg s0, s0\n"; // Negate the float
+            fmove(o, "s0", params[0]); // Move s0 to destination
+            break;
+        }
+
         move(o, params[1], "w0");
         o << "    neg w0, w0\n";
         move(o, "w0", params[0]); // Move w0 to destination
@@ -356,6 +552,20 @@ void IRInstr::gen_asm(std::ostream &o)
         move(o, params[0], "w1"); // Load address into w1
         move(o, params[1], "w0"); // Load value into w0
         o << "    str w0, [x1]\n";        // Store value w0 to address in w1
+        break;
+
+    case intToFloat:
+        // intToFloat: params[0] = destination, params[1] = source
+        move(o, params[1], "w0");
+        o << "    scvtf s0, w0\n"; // Convert int to float
+        fmove(o, "s0", params[0]); // Move s0 to destination
+        break;
+
+    case floatToInt:
+        // floatToInt: params[0] = destination, params[1] = source
+        fmove(o, params[1], "s0");
+        o << "    fcvtzs w0, s0\n"; // Convert float to int
+        move(o, "w0", params[0]); // Move w0 to destination
         break;
 
     case call:
@@ -474,15 +684,27 @@ std::string CFG::IR_reg_to_asm(std::string &reg, bool ignoreCst)
     if (p != nullptr)
     {
         if (p->isConstant() && !ignoreCst) {
-            return "#" + std::to_string(p->getCstValue());
+            if (p->getType() != VarType::FLOAT) {
+                return "#" + p->getCstValue();
+            }
+
+            std::string label = rodm->putFloatIfNotExists(std::stof(p->getCstValue()));
+            return "_" + label;
         }
 
         if (p->scopeType == GLOBAL) {
             return "_" + reg;
 
         } else {
-            // Return frame pointer relative address [fp, #-offset]
-            return "[fp, #-" + std::to_string(p->offset) + "]";
+
+            if (p->offset < 254) {
+                // Return frame pointer relative address [fp, #offset]
+                return "[fp, #-" + std::to_string(p->offset) + "]";
+            }
+
+            // With offset > 254, we can not use [fp, #offset] directly, so add ;;; to indicate
+            // that this is a special case and needs to be handled differently
+            return ";;;[fp, #-" + std::to_string(p->offset) + "]";
         }
     }
 
@@ -567,7 +789,29 @@ void GVM::gen_asm(std::ostream &o)
     o << ".align 2\n";
 }
 
-// -------------------------- Code gen -------------------------------
+//* ---------------------- Read only data manager ---------------------- */
+void RoDM::gen_asm(std::ostream &o)
+{
+    o << "    .section __TEXT,__const" << std::endl;
+    for (const auto &pair : floatData)
+    {
+        o << "_" << pair.first << ":" << "         ; = " << pair.second << std::endl;
+        std::string hexIEEEValue = floatToLong_Ieee754(pair.second);
+        o << "    .word " << "0x" << hexIEEEValue << std::endl;
+    }
+
+    // if (needDataForUnaryOp) {
+    //     o << labelDataForUnaryOp << ":" << "         // = " << 0.0f << std::endl;
+    //     o << "    .long -2147483648" << std::endl;
+    //     o << "    .long 0" << std::endl;
+    //     o << "    .long 0" << std::endl;
+    //     o << "    .long 0" << std::endl;
+    // }
+
+    // o << "\t.text" << std::endl;
+}
+
+//* -------------------------- Code gen -------------------------------
 void CodeGenVisitor::gen_asm(ostream &os)
 {
     gvm->gen_asm(os);
@@ -578,6 +822,7 @@ void CodeGenVisitor::gen_asm(ostream &os)
         cfg->gen_asm(os);
         os << "\n;================================================= \n\n";
     }
+    rodm->gen_asm(os);
 }
 
 #endif // __aarch64__
