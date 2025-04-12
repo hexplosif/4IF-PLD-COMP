@@ -611,12 +611,9 @@ void GVM::gen_asm(std::ostream &o)
             continue;
         o << "    .globl " << var.first << "\n";
         o << var.first << ":\n";
-        if (globalVariableValues.count(var.first) == 0)
-        {
+        if (globalVariableValues.count(var.first) == 0) {
             o << "    .zero 4\n";
-        }
-        else
-        {
+        } else {
             o << "    .long " << globalVariableValues[var.first] << "\n";
         }
     }

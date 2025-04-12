@@ -70,5 +70,6 @@ CONST_STRING : '"' ([ -~])*? '"' ;
 OPM: '*' | '/' | '%' ; // Opérateurs multiplicatifs 
 
 COMMENT : '/*' .*? '*/' -> skip ;
+COMMENT_LINE : '//' .*? '\n' -> skip ;
 DIRECTIVE : '#' .*? '\n' -> skip ;
 WS    : [ \t\r\n] -> channel(HIDDEN);

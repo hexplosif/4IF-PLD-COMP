@@ -101,6 +101,11 @@ void fmove(std::ostream &o, const std::string& src, const std::string& dest) {
             o << "    fmov " << dest << ", " << src << "\n";
         } else if (is_memory(dest)) {
             o << "    str " << src << ", " << dest << "\n";
+        } else if (is_cst(dest)) {
+            o << "    fmov " << dest << ", " << src << "\n";
+        } else if (is_global(dest)) {
+            o << "    adrp	x8, " << dest << "@PAGE\n";
+            o << "    str " << src << ", [x8, " << dest << "@PAGEOFF]" << "\n";
         }
     } else if (is_memory(src)) {
         if (is_register(dest)) {
@@ -108,10 +113,16 @@ void fmove(std::ostream &o, const std::string& src, const std::string& dest) {
         } else if (is_memory(dest)) {
             o << "    ldr w9, " << src << "\n"; // Load into a temporary register
             o << "    str w9, " << dest << "\n"; // Store into destination memory
+        } else if (is_cst(dest)) {
+            o << "    ldr w9, " << src << "\n"; // Load into a temporary register
+            o << "    fmov " << dest << ", w9\n"; // Move to constant
         }
     } else if (is_cst(src)) {
         if (is_register(dest)) {
             o << "    fmov " << dest << ", " << src << "\n";
+        } else if (is_memory(dest)) {
+            o << "    fmov " << src << ", w9\n"; // Move to a temporary register
+            o << "    str w9, " << dest << "\n"; // Store into destination memory
         }
     } else if (is_global(src)) {
         if (is_register(dest)) {
@@ -230,6 +241,16 @@ void IRInstr::gen_asm(std::ostream &o)
     case copyTblx: {
         // copyTblx: params[0] = base_offset (string literal number), params[1] = value (mem/imm), params[2] = index (mem/imm)
         // Address = fp - base_offset + index * 4
+        if (t == VarType::FLOAT_PTR) {
+            move(o, params[2], "w5");      // Load index into w5
+            fmove(o, params[1], "s0");      // Load value to store into s0
+            o << "    lsl w2, w5, #2\n";         // w2 = index * 4
+            o << "    sub x3, fp, #" << params[0] << "\n"; // w3 = fp - base_offset
+            o << "    add x2, x3, w2, uxtw\n";         // final addr = base + offset
+            fmove(o, "s0", "[x2]");           // Move s0 to a temporary register
+            break;
+        }
+
         move(o, params[2], "w1");      // Load index into w1
         move(o, params[1], "w0");      // Load value to store into w0
         o << "    lsl w2, w1, #2\n";         // w2 = index * 4
@@ -240,6 +261,19 @@ void IRInstr::gen_asm(std::ostream &o)
     }
     case addTblx: {
         // addTblx: params[0]=base_offset, params[1]=value_to_add (mem/imm), params[2]=index (mem/imm)
+        // Address = fp - base_offset + index * 4
+        if (t == VarType::FLOAT_PTR) {
+            move(o, params[2], "w5");      // index
+            fmove(o, params[1], "s0");      // value_to_add
+            o << "    lsl w2, w5, #2\n";         // offset = index * 4
+            o << "    sub x3, fp, #" << params[0] << "\n"; // base addr = fp - base_offset
+            o << "    add x2, x3, w2, uxtw\n";         // final addr = base + offset
+            o << "    ldr s1, [x2]\n";           // Load current array value into s1
+            o << "    fadd s1, s1, s0\n";         // Add the value
+            o << "    str s1, [x2]\n";           // Store back
+            break;
+        }
+
         move(o, params[2], "w1");      // index
         move(o, params[1], "w0");      // value_to_add
         o << "    lsl w2, w1, #2\n";         // offset = index * 4
@@ -250,7 +284,21 @@ void IRInstr::gen_asm(std::ostream &o)
         o << "    str w3, [x2]\n";           // Store back
         break;
     }
-     case subTblx: {
+    case subTblx: {
+        // subTblx: params[0]=base_offset, params[1]=value_to_sub (mem/imm), params[2]=index (mem/imm)
+        // Address = fp - base_offset + index * 4
+        if (t == VarType::FLOAT_PTR) {
+            move(o, params[2], "w5");      // index
+            fmove(o, params[1], "s0");      // value_to_sub
+            o << "    lsl w2, w5, #2\n";         // offset = index * 4
+            o << "    sub x3, fp, #" << params[0] << "\n"; // base addr = fp - base_offset
+            o << "    add x2, x3, w2, uxtw\n";         // final addr = base + offset
+            o << "    ldr s1, [x2]\n";           // Load current array value into s1
+            o << "    fsub s1, s1, s0\n";         // Subtract the value
+            o << "    str s1, [x2]\n";           // Store back
+            break;
+        }
+
         move(o, params[2], "w1");      // index
         move(o, params[1], "w0");      // value_to_sub
         o << "    lsl w2, w1, #2\n";         // offset = index * 4
@@ -262,6 +310,20 @@ void IRInstr::gen_asm(std::ostream &o)
         break;
     }
     case mulTblx: {
+        // mulTblx: params[0]=base_offset, params[1]=value_to_mul (mem/imm), params[2]=index (mem/imm)
+        // Address = fp - base_offset + index * 4
+        if (t == VarType::FLOAT_PTR) {
+            move(o, params[2], "w5");      // index
+            fmove(o, params[1], "s0");      // value_to_mul
+            o << "    lsl w2, w5, #2\n";         // offset = index * 4
+            o << "    sub x3, fp, #" << params[0] << "\n"; // base addr = fp - base_offset
+            o << "    add x2, x3, w2, uxtw\n";         // final addr = base + offset
+            o << "    ldr s1, [x2]\n";           // Load current array value into s1
+            o << "    fmul s1, s1, s0\n";         // Multiply the value
+            o << "    str s1, [x2]\n";           // Store back
+            break;
+        }
+
         move(o, params[2], "w1");      // index
         move(o, params[1], "w0");      // value_to_mul
         o << "    lsl w2, w1, #2\n";         // offset = index * 4
@@ -273,6 +335,20 @@ void IRInstr::gen_asm(std::ostream &o)
         break;
     }
     case divTblx: {
+        // divTblx: params[0]=base_offset, params[1]=divisor (mem/imm), params[2]=index (mem/imm)
+        // Address = fp - base_offset + index * 4
+        if (t == VarType::FLOAT_PTR) {
+            move(o, params[2], "w5");      // index
+            fmove(o, params[1], "s0");      // divisor
+            o << "    lsl w2, w5, #2\n";         // offset = index * 4
+            o << "    sub x3, fp, #" << params[0] << "\n"; // base addr = fp - base_offset
+            o << "    add x2, x3, w2, uxtw\n";         // final addr = base + offset
+            o << "    ldr s1, [x2]\n";           // Load current array value (dividend) into s1
+            o << "    fdiv s1, s1, s0\n";         // Divide the value
+            o << "    str s1, [x2]\n";           // Store back
+            break;
+        }
+
         move(o, params[2], "w1");      // index
         move(o, params[1], "w0");      // divisor
         o << "    lsl w2, w1, #2\n";         // offset = index * 4
@@ -283,7 +359,7 @@ void IRInstr::gen_asm(std::ostream &o)
         o << "    str w3, [x2]\n";           // Store back
         break;
     }
-     case modTblx: {
+    case modTblx: {
         move(o, params[2], "w1");      // index
         move(o, params[1], "w0");      // divisor
         o << "    lsl w2, w1, #2\n";         // offset = index * 4
@@ -297,6 +373,17 @@ void IRInstr::gen_asm(std::ostream &o)
     }
     case getTblx: {
         // getTblx: params[0] = destination (mem), params[1] = base_offset (string literal number), params[2] = index (mem/imm)
+        // Address = fp - base_offset + index * 4
+        if (t == VarType::FLOAT_PTR) {
+            move(o, params[2], "w5");      // index
+            o << "    lsl w2, w5, #2\n";         // offset = index * 4
+            o << "    sub x3, fp, #" << params[1] << "\n"; // base addr = fp - base_offset
+            o << "    add x2, x3, w2, uxtw\n";         // final addr = base + offset
+            o << "    ldr s0, [x2]\n";           // Load value from array element into s0
+            fmove(o, "s0", params[0]); // Move s0 to destination
+            break;
+        }
+
         move(o, params[2], "w1");      // index
         o << "    lsl w2, w1, #2\n";         // offset = index * 4
         o << "    sub x3, fp, #" << params[1] << "\n"; // base addr = fp - base_offset
@@ -712,7 +799,6 @@ std::string CFG::IR_reg_to_asm(std::string &reg, bool ignoreCst)
     return reg;
 }
 
-
 void CFG::gen_asm_prologue(std::ostream &o)
 {
     // Standard ARM64 prologue
@@ -761,9 +847,7 @@ void GVM::gen_asm(std::ostream &o)
     if (globalScope->getNumberVariable() == 0)
         return;
 
-    o << "\n";
-    o << ".data\n"; // Switch to data segment
-    o << ".align 2\n"; // Align data (4 bytes for integers)
+    o << "    .section   __DATA, __data\n";
 
     for (auto const& [name, symbol] : globalScope->getTable())
     {
@@ -771,8 +855,7 @@ void GVM::gen_asm(std::ostream &o)
         if (SymbolTable::isTempVariable(name))
             continue;
 
-        o << ".set fp, x29\n";
-        o << ".global _" << name << "\n"; // Export symbol
+        o << "    .global _" << name << "\n"; // Export symbol
         o << "_" << name << ":\n"; // Label for the variable
 
         if (globalVariableValues.count(name) == 0) {
@@ -780,13 +863,19 @@ void GVM::gen_asm(std::ostream &o)
             o << "    .space 4\n"; // Reserve 4 bytes, initialized to zero by default
         } else {
             // Initialized global variable
-            o << "    .word " << globalVariableValues[name] << "\n"; // .word for 32-bit integer
+            VarType t = symbol.type;
+            std::string value = globalVariableValues[name];
+            if (t == VarType::INT) {
+                o << "    .long " << value << "\n"; // Store integer value
+            } else if (t == VarType::FLOAT) {
+                float fValue = std::stof(value);
+                std::string hexIEEEValue = floatToLong_Ieee754(fValue);
+                o << "    .long 0x" << hexIEEEValue << "\t\t ; float " << fValue << "\n"; // Store float value
+            } else {
+                o << "    .long 0\n"; // Default to zero for unsupported types
+            }
         }
     }
-
-    o << "\n";
-    o << ".text\n"; // Switch back to text segment for code
-    o << ".align 2\n";
 }
 
 //* ---------------------- Read only data manager ---------------------- */
@@ -797,7 +886,7 @@ void RoDM::gen_asm(std::ostream &o)
     {
         o << "_" << pair.first << ":" << "         ; = " << pair.second << std::endl;
         std::string hexIEEEValue = floatToLong_Ieee754(pair.second);
-        o << "    .word " << "0x" << hexIEEEValue << std::endl;
+        o << "    .word " << "0x" << hexIEEEValue << "\t\t ; float " << pair.second <<  std::endl;
     }
 
     // if (needDataForUnaryOp) {
@@ -814,14 +903,19 @@ void RoDM::gen_asm(std::ostream &o)
 //* -------------------------- Code gen -------------------------------
 void CodeGenVisitor::gen_asm(ostream &os)
 {
-    gvm->gen_asm(os);
-    os << ".text\n";
+    os << "    .section __TEXT, __text\n";
+    os << "    .p2align 2\n";
+
     os << "\n;================================================ \n\n";
     for (auto &cfg : cfgs)
     {
         cfg->gen_asm(os);
         os << "\n;================================================= \n\n";
     }
+    os << "; Global Variables \n";
+    gvm->gen_asm(os);
+    os << "\n;================================================= \n\n";
+    os << "; Read only data \n";
     rodm->gen_asm(os);
 }
 

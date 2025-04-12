@@ -114,7 +114,7 @@ std::string RoDM::putFloatIfNotExists(float value)
     return label; // Return the new label
 }
 
-std::string RoDM::floatToLong_Ieee754(float value) {
+std::string floatToLong_Ieee754(float value) {
     union {
         float d;
         uint32_t i;

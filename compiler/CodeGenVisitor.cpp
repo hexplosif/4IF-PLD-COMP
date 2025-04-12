@@ -146,7 +146,7 @@ antlrcpp::Any CodeGenVisitor::visitSub_declWithType(ifccParser::Sub_declContext 
                 exit(1);
             }
 
-            string typedExpr = this->implicitConversion(exprCst, type);            
+            string typedExpr = this->implicitConversion(exprCst, type);  
             gvm->setGlobalVariableValue(varName, exprCstSymbol->getCstValue());
             freeLastTempVariable(1);
         }
@@ -173,15 +173,15 @@ antlrcpp::Any CodeGenVisitor::visitSub_declWithType(ifccParser::Sub_declContext 
             currentCfg->currentScope->addLocalVariable(varName, VarType::CHAR_PTR, size);
             for (int i = 0; i < size; i++)
             {
-                string tempChar = currentCfg->currentScope->addTempConstVariable(VarType::CHAR, to_string((int)value[i]));
-                string tempPos = currentCfg->currentScope->addTempConstVariable(VarType::INT, to_string(i));
+                string tempChar = addTempConstVariable(VarType::CHAR, to_string((int)value[i]));
+                string tempPos = addTempConstVariable(VarType::INT, to_string(i));
                 currentCfg->current_bb->add_IRInstr(IRInstr::copyTblx, VarType::CHAR_PTR, {varName, tempChar, tempPos});
             }
 
 
         } else if (ctx->CONST() != nullptr) { // C'est un tableaux
             int size = std::stoi(ctx->CONST()->getText());
-            VarType ptrType = (type == VarType::INT) ? VarType::INT_PTR : VarType::CHAR_PTR; //TODO: ameliorer celui ligne
+            VarType ptrType = Symbol::getPtrType(type);
             currentCfg->currentScope->addLocalVariable(varName, ptrType, size); 
 
             int i = 0;
@@ -191,7 +191,7 @@ antlrcpp::Any CodeGenVisitor::visitSub_declWithType(ifccParser::Sub_declContext 
                     exit(1);
                 }
 
-                string tempPos = currentCfg->currentScope->addTempConstVariable(VarType::INT, to_string(i));
+                string tempPos = addTempConstVariable(VarType::INT, to_string(i));
                 string tempValue = any_cast<string>(visit(ctx->expr(i)));
 
                 string typedTempValue = this->implicitConversion(tempValue, type);    
@@ -227,7 +227,6 @@ antlrcpp::Any CodeGenVisitor::visitAssignmentStatement(ifccParser::AssignmentSta
     auto assign = ctx->assign_stmt();
 
     string varName = assign->VAR()->getText();
-
     Symbol *var = findVariable(varName);
     VarType type = var->type;
     if (var == nullptr) {
@@ -235,14 +234,13 @@ antlrcpp::Any CodeGenVisitor::visitAssignmentStatement(ifccParser::AssignmentSta
         exit(1);
     }
 
-    // On suppose que la variable a déjà été déclarée
     string op = assign->op_assign()->getText();
     size_t equalsPos = ctx->getText().find('=');
     if (equalsPos != std::string::npos && ctx->getText().substr(0, equalsPos).find('[') != std::string::npos)
     { // C'est un tableau
         string pos = any_cast<string>(this->visit(assign->expr(0)));
         string exprResult = any_cast<string>(this->visit(assign->expr(1)));
-        string typedExprResult = this->implicitConversion(exprResult, type);
+        string typedExprResult = this->implicitConversion(exprResult, Symbol::getBaseType(type));
 
         if (op == "=")
         {
@@ -268,9 +266,13 @@ antlrcpp::Any CodeGenVisitor::visitAssignmentStatement(ifccParser::AssignmentSta
         }
         else if (op == "%=")
         {
-            string tempReg = (type == VarType::FLOAT) ? floatRegs[1] : tempRegs[4];
-            currentCfg->current_bb->add_IRInstr(IRInstr::copy, type, {tempReg, typedExprResult});
-            currentCfg->current_bb->add_IRInstr(IRInstr::modTblx, type, {varName, tempReg, pos});
+            if (type == VarType::FLOAT) {
+                FeedbackOutputFormat::showFeedbackOutput("error", "mod operator is not supported for float type");
+                exit(1);
+            }
+
+            currentCfg->current_bb->add_IRInstr(IRInstr::copy, type, {tempRegs[4], typedExprResult});
+            currentCfg->current_bb->add_IRInstr(IRInstr::modTblx, type, {varName, tempRegs[4], pos});
         }
 
         if (findVariable(typedExprResult)->isConstant()) {
@@ -306,9 +308,13 @@ antlrcpp::Any CodeGenVisitor::visitAssignmentStatement(ifccParser::AssignmentSta
         }
         else if (op == "%=")
         {
-            string tempReg = (type == VarType::FLOAT) ? floatRegs[1] : tempRegs[2];
-            currentCfg->current_bb->add_IRInstr(IRInstr::copy, type, {tempReg, typedExprResult});
-            currentCfg->current_bb->add_IRInstr(IRInstr::mod, type, {varName, varName, tempReg});
+            if (type == VarType::FLOAT) {
+                FeedbackOutputFormat::showFeedbackOutput("error", "mod operator is not supported for float type");
+                exit(1);
+            }
+
+            currentCfg->current_bb->add_IRInstr(IRInstr::copy, type, {tempRegs[2], typedExprResult});
+            currentCfg->current_bb->add_IRInstr(IRInstr::mod, type, {varName, varName, tempRegs[2]});
         }
 
         if (findVariable(typedExprResult)->isConstant()) {
@@ -354,6 +360,116 @@ antlrcpp::Any CodeGenVisitor::visitReturn_stmt(ifccParser::Return_stmtContext *c
     currentCfg->current_bb->add_IRInstr(IRInstr::jmp, VarType::INT, {currentCfg->get_epilogue_label()});
     return 0;
 }
+
+antlrcpp::Any CodeGenVisitor::visitIf_stmt(ifccParser::If_stmtContext *ctx)
+{
+    bool hasElseStmt = ctx->stmt().size() > 1;
+
+    // Évalue la condition
+    std::string cond = any_cast<std::string>(visit(ctx->expr()));
+    // TODO: Vérifier le type de la condition
+
+    BasicBlock *tmp = currentCfg->current_bb->exit_true;
+    // Crée un nouveau bloc pour la suite (join)
+    std::string joinLabel = currentCfg->new_BB_name();
+    BasicBlock *join_bb = new BasicBlock(currentCfg, joinLabel);
+    currentCfg->add_bb(join_bb);
+
+    BasicBlock *current = currentCfg->current_bb;
+    current->test_var_name = cond;
+
+    // Création des blocs then et else
+    std::string thenLabel = currentCfg->new_BB_name();
+    BasicBlock *then_bb = new BasicBlock(currentCfg, thenLabel);
+    currentCfg->add_bb(then_bb);
+
+    // Crée le bloc pour la branche "else"
+    BasicBlock *else_bb = join_bb;
+    if (hasElseStmt)
+    {
+        std::string elseLabel = currentCfg->new_BB_name();
+        else_bb = new BasicBlock(currentCfg, elseLabel);
+        currentCfg->add_bb(else_bb);
+        else_bb->exit_true = join_bb;
+    }
+
+    // Connecter les blocs
+    join_bb->exit_true = tmp;
+    then_bb->exit_true = join_bb;
+    currentCfg->current_bb->exit_true = then_bb;
+    currentCfg->current_bb->exit_false = else_bb;
+
+    // Configure le bloc courant pour effectuer un saut conditionnel
+    currentCfg->current_bb->test_var_name = cond;
+    currentCfg->current_bb->test_var_register = currentCfg->IR_reg_to_asm(cond);
+
+    // Génère la branche "then"
+    currentCfg->current_bb = then_bb;
+    this->visit(ctx->stmt(0));
+    // then_bb->add_IRInstr(IRInstr::jmp, VarType::INT, {joinLabel});
+
+    // Génère la branche "else"
+    if (hasElseStmt)
+    {
+        currentCfg->current_bb = else_bb;
+        this->visit(ctx->stmt(1));
+        // else_bb->add_IRInstr(IRInstr::jmp, VarType::INT, {joinLabel});
+    }
+
+    // Le code après le if se trouve dans join_bb
+    currentCfg->current_bb = join_bb;
+    return 0;
+}
+
+antlrcpp::Any CodeGenVisitor::visitWhile_stmt(ifccParser::While_stmtContext *ctx)
+{
+    // Crée un bloc pour évaluer la condition
+    std::string condLabel = currentCfg->new_BB_name();
+    BasicBlock *cond_bb = new BasicBlock(currentCfg, "cond" + condLabel);
+    currentCfg->add_bb(cond_bb);
+    currentCfg->current_bb->exit_true = cond_bb;
+    // cfg->current_bb->add_IRInstr(IRInstr::jmp, VarType::INT, {condLabel}); // Ajoute un saut du bloc courant vers le
+    // bloc de condition
+
+    // Génère le bloc de condition
+    currentCfg->current_bb = cond_bb;
+    std::string cond = any_cast<std::string>(this->visit(ctx->expr()));
+    // TODO: Vérifier le type de la condition
+    cond_bb->test_var_name = cond;
+    cond_bb->test_var_register = currentCfg->IR_reg_to_asm(cond);
+
+    // Crée le bloc du corps de la boucle
+    std::string bodyLabel = currentCfg->new_BB_name();
+    BasicBlock *body_bb = new BasicBlock(currentCfg, "body" + bodyLabel);
+    currentCfg->add_bb(body_bb);
+
+    // Crée le bloc de sortie (après la boucle)
+    std::string joinLabel = currentCfg->new_BB_name();
+    BasicBlock *join_bb = new BasicBlock(currentCfg, "join" + joinLabel);
+    currentCfg->add_bb(join_bb);
+
+    // La condition détermine le chemin
+    cond_bb->exit_true = body_bb;
+    cond_bb->exit_false = join_bb;
+    body_bb->exit_true = cond_bb;
+
+    // Génère le corps de la boucle
+    currentCfg->current_bb = body_bb;
+    this->visit(ctx->stmt());
+
+    // La suite du code se trouve dans join_bb
+    currentCfg->current_bb = join_bb;
+    return 0;
+}
+
+antlrcpp::Any CodeGenVisitor::visitBlockStatement(ifccParser::BlockStatementContext *ctx)
+{
+    enterNewScope();
+    visit(ctx->block());
+    exitCurrentScope();
+    return 0;
+}
+
 
 // ==============================================================
 //                          Expressions
@@ -470,8 +586,8 @@ antlrcpp::Any CodeGenVisitor::visitConstantStringExpression(ifccParser::Constant
     string temp = currentCfg->currentScope->addTempVariable(VarType::CHAR_PTR, size);
     for (int i = 0; i < size; i++)
     {
-        string tempChar = currentCfg->currentScope->addTempConstVariable(VarType::CHAR, to_string((int)value[i]));
-        string tempPos = currentCfg->currentScope->addTempConstVariable(VarType::INT, to_string(i));
+        string tempChar = addTempConstVariable(VarType::CHAR, to_string((int)value[i]));
+        string tempPos = addTempConstVariable(VarType::INT, to_string(i));
         currentCfg->current_bb->add_IRInstr(IRInstr::copyTblx, VarType::CHAR_PTR, {temp, tempChar, tempPos});
     }
     return temp;
@@ -658,7 +774,7 @@ antlrcpp::Any CodeGenVisitor::visitArrayAccessExpression(ifccParser::ArrayAccess
     }
 
     VarType type = var->type;
-    if (type != VarType::INT_PTR && type != VarType::CHAR_PTR) {
+    if (!Symbol::isPointerType(type)) {
         FeedbackOutputFormat::showFeedbackOutput("error", "variable " + varName + " is not an array.");
         exit(1);
     }
@@ -670,7 +786,7 @@ antlrcpp::Any CodeGenVisitor::visitArrayAccessExpression(ifccParser::ArrayAccess
         exit(1);
     }
     
-    VarType tempType = (type == VarType::INT_PTR) ? VarType::INT : VarType::CHAR; //TODO: ameliorer celui ligne
+    VarType tempType = Symbol::getBaseType(type);
     string temp = currentCfg->currentScope->addTempVariable(tempType);
     currentCfg->current_bb->add_IRInstr(IRInstr::getTblx, type, {temp, varName, pos});
     return temp;
@@ -764,115 +880,6 @@ antlrcpp::Any CodeGenVisitor::visitLogiqueParesseuxExpression(ifccParser::Logiqu
     currentCfg->current_bb->add_IRInstr(logOp, type, {temp, left, right});
 
     return temp;
-}
-
-antlrcpp::Any CodeGenVisitor::visitIf_stmt(ifccParser::If_stmtContext *ctx)
-{
-    bool hasElseStmt = ctx->stmt().size() > 1;
-
-    // Évalue la condition
-    std::string cond = any_cast<std::string>(visit(ctx->expr()));
-    // TODO: Vérifier le type de la condition
-
-    BasicBlock *tmp = currentCfg->current_bb->exit_true;
-    // Crée un nouveau bloc pour la suite (join)
-    std::string joinLabel = currentCfg->new_BB_name();
-    BasicBlock *join_bb = new BasicBlock(currentCfg, joinLabel);
-    currentCfg->add_bb(join_bb);
-
-    BasicBlock *current = currentCfg->current_bb;
-    current->test_var_name = cond;
-
-    // Création des blocs then et else
-    std::string thenLabel = currentCfg->new_BB_name();
-    BasicBlock *then_bb = new BasicBlock(currentCfg, thenLabel);
-    currentCfg->add_bb(then_bb);
-
-    // Crée le bloc pour la branche "else"
-    BasicBlock *else_bb = join_bb;
-    if (hasElseStmt)
-    {
-        std::string elseLabel = currentCfg->new_BB_name();
-        else_bb = new BasicBlock(currentCfg, elseLabel);
-        currentCfg->add_bb(else_bb);
-        else_bb->exit_true = join_bb;
-    }
-
-    // Connecter les blocs
-    join_bb->exit_true = tmp;
-    then_bb->exit_true = join_bb;
-    currentCfg->current_bb->exit_true = then_bb;
-    currentCfg->current_bb->exit_false = else_bb;
-
-    // Configure le bloc courant pour effectuer un saut conditionnel
-    currentCfg->current_bb->test_var_name = cond;
-    currentCfg->current_bb->test_var_register = currentCfg->IR_reg_to_asm(cond);
-
-    // Génère la branche "then"
-    currentCfg->current_bb = then_bb;
-    this->visit(ctx->stmt(0));
-    // then_bb->add_IRInstr(IRInstr::jmp, VarType::INT, {joinLabel});
-
-    // Génère la branche "else"
-    if (hasElseStmt)
-    {
-        currentCfg->current_bb = else_bb;
-        this->visit(ctx->stmt(1));
-        // else_bb->add_IRInstr(IRInstr::jmp, VarType::INT, {joinLabel});
-    }
-
-    // Le code après le if se trouve dans join_bb
-    currentCfg->current_bb = join_bb;
-    return 0;
-}
-
-antlrcpp::Any CodeGenVisitor::visitWhile_stmt(ifccParser::While_stmtContext *ctx)
-{
-    // Crée un bloc pour évaluer la condition
-    std::string condLabel = currentCfg->new_BB_name();
-    BasicBlock *cond_bb = new BasicBlock(currentCfg, "cond" + condLabel);
-    currentCfg->add_bb(cond_bb);
-    currentCfg->current_bb->exit_true = cond_bb;
-    // cfg->current_bb->add_IRInstr(IRInstr::jmp, VarType::INT, {condLabel}); // Ajoute un saut du bloc courant vers le
-    // bloc de condition
-
-    // Génère le bloc de condition
-    currentCfg->current_bb = cond_bb;
-    std::string cond = any_cast<std::string>(this->visit(ctx->expr()));
-    // TODO: Vérifier le type de la condition
-    cond_bb->test_var_name = cond;
-    cond_bb->test_var_register = currentCfg->IR_reg_to_asm(cond);
-
-    // Crée le bloc du corps de la boucle
-    std::string bodyLabel = currentCfg->new_BB_name();
-    BasicBlock *body_bb = new BasicBlock(currentCfg, "body" + bodyLabel);
-    currentCfg->add_bb(body_bb);
-
-    // Crée le bloc de sortie (après la boucle)
-    std::string joinLabel = currentCfg->new_BB_name();
-    BasicBlock *join_bb = new BasicBlock(currentCfg, "join" + joinLabel);
-    currentCfg->add_bb(join_bb);
-
-    // La condition détermine le chemin
-    cond_bb->exit_true = body_bb;
-    cond_bb->exit_false = join_bb;
-    body_bb->exit_true = cond_bb;
-
-    // Génère le corps de la boucle
-    currentCfg->current_bb = body_bb;
-    this->visit(ctx->stmt());
-
-    // La suite du code se trouve dans join_bb
-    currentCfg->current_bb = join_bb;
-    return 0;
-}
-
-antlrcpp::Any CodeGenVisitor::visitBlockStatement(ifccParser::BlockStatementContext *ctx)
-{
-    enterNewScope();
-    visit(ctx->block());
-    exitCurrentScope();
-    return 0;
 }
 
 // ==============================================================
@@ -1055,12 +1062,12 @@ std::string CodeGenVisitor::implicitConversion(std::string &varName, VarType toT
     if (var->isConstant()) {
         if ( Symbol::isFloatingType(toType) && !Symbol::isFloatingType(var->type) ) {
             float value = std::stof(var->getCstValue());
-            return currentCfg->currentScope->addTempConstVariable(toType, to_string(value));  
+            return addTempConstVariable(toType, to_string(value));  
         } 
         
         if ( Symbol::isIntegerType(toType) & !Symbol::isIntegerType(var->type) ) {
             int value = std::stoi(var->getCstValue());
-            return currentCfg->currentScope->addTempConstVariable(toType, to_string(value));
+            return addTempConstVariable(toType, to_string(value));
         }
 
         var->type = toType;

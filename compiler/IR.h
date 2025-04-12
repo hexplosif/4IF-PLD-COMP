@@ -167,8 +167,9 @@ class RoDM { //Read Only Data Manager
         std::map<std::string, float> floatData; /**< the float values of the read-only data */
         int labelCounter; /**< the label counter for the read-only data */
         std::string getNewFloatLabel(); /**< returns the label of the double data */
-
-        std::string floatToLong_Ieee754(float value); /**< returns the IEEE 754 32bits version of double */
 };
+
+std::string floatToLong_Ieee754(float value); /**< returns the IEEE 754 32bits version of double */
+
 
 #endif // IR_H

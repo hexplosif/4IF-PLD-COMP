@@ -12,6 +12,7 @@ enum VarType {
 
     INT_PTR, //TODO: j'ai ajouté ça pour les tableaux, mais j'ai rien fait, il faut que qui est responsable pour le pointer le fasse
     CHAR_PTR,
+    FLOAT_PTR,
 };
 
 enum ScopeType {
@@ -50,6 +51,26 @@ class Symbol
 
         // Static functions: Type
 
+        static VarType getPtrType(VarType type) {
+            if (type == VarType::INT) return VarType::INT_PTR;
+            if (type == VarType::CHAR) return VarType::CHAR_PTR;
+            if (type == VarType::FLOAT) return VarType::FLOAT_PTR;
+            std::cerr << "error: can not get pointer type from " << Symbol::getTypeStr(type) << std::endl;
+            exit(1);
+        }
+
+        static VarType getBaseType(VarType type) {
+            if (type == VarType::INT_PTR) return VarType::INT;
+            if (type == VarType::CHAR_PTR) return VarType::CHAR;
+            if (type == VarType::FLOAT_PTR) return VarType::FLOAT;
+            std::cerr << "error: can not get base type from " << Symbol::getTypeStr(type) << std::endl;
+            exit(1);
+        }
+
+        static bool isPointerType(VarType type) {
+            return (type == VarType::INT_PTR || type == VarType::CHAR_PTR || type == VarType::FLOAT_PTR);
+        }
+
         static VarType getTypeFromStr(std::string strType ) {
             if (strType == "int") return VarType::INT;
             if (strType == "char") return VarType::CHAR;
@@ -57,6 +78,7 @@ class Symbol
             if (strType == "float") return VarType::FLOAT;
             if (strType == "int*") return VarType::INT_PTR;
             if (strType == "char*") return VarType::CHAR_PTR;
+            if (strType == "float*") return VarType::FLOAT_PTR;
             std::cerr << "error: unknown type " << strType << std::endl;
             exit(1);
         }
@@ -69,6 +91,7 @@ class Symbol
                 case VarType::FLOAT: return "float";
                 case VarType::INT_PTR: return "int*";
                 case VarType::CHAR_PTR: return "char*";
+                case VarType::FLOAT_PTR: return "float*";
                 default: return "unknown";
             }
         }
