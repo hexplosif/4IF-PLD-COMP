@@ -24,8 +24,6 @@ OBJECTS = build/ifccBaseVisitor.o \
           build/CodeGenVisitor.o \
           build/SymbolTable.o \
           build/IR.o \
-		  build/gen_asm_arm.o \
-		  build/gen_asm_msp430.o \
 		  build/gen_asm_x86.o \
 		  build/gen_asm_arm64.o \
 
@@ -33,25 +31,11 @@ ifcc: $(OBJECTS)
 	@mkdir -p build
 	$(CC) $(LDFLAGS) build/*.o $(ANTLRLIB) -o ifcc
 
-ifcc_msp430: $(OBJECTS)
-	@mkdir -p build
-	$(CC) $(LDFLAGS) build/*.o $(ANTLRLIB) -o ifcc_msp430
-
-ifcc_arm: $(OBJECTS)
-	@mkdir -p build 
-	$(CC) $(LDFLAGS) build/*.o $(ANTLRLIB) -o ifcc_arm 
-
 ##########################################
 # compile our hand-written C++ code: main(), CodeGenVisitor, SymbolTable, IR, etc.
 build/%.o: %.cpp generated/ifccParser.cpp
 	@mkdir -p build
 	$(CC) $(CCFLAGS) -MMD -o $@ $< 
-
-build_msp430: clean
-	$(MAKE) CCFLAGS="$(CCFLAGS_MSP430)" ifcc_msp430
-
-build_arm: clean
-	$(MAKE) CCFLAGS="$(CCFLAGS_ARM)" ifcc_arm
 
 ##########################################
 # compile all the antlr-generated C++ sources
@@ -91,8 +75,6 @@ gui:
 clean:
 	rm -rf build generated
 	rm -f ifcc
-	rm -f ifcc_msp430
-	rm -f ifcc_arm
 
 ##########################################
 # run the gcc and ifcc compiler
@@ -101,11 +83,3 @@ run: ifcc
 	gcc -S ret42.c -o ret42_gcc.s
 	gcc ret42_ifcc.s
 	./a.out
-
-run_msp430: build_msp430
-	./ifcc_msp430 ret42.c > ret42_ifcc.s
-	msp430-gcc -S ret42.c -o ret42_gcc.s
-	msp430-gcc ret42_ifcc.s
-
-run_arm: build_arm
-	./ifcc_arm ret42.c > ret42_ifcc.s
