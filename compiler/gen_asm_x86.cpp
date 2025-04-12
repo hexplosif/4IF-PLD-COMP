@@ -26,7 +26,7 @@ bool isRegister(std::string &reg)
 
 void move(std::ostream &o, VarType t, std::string src, std::string dest)
 {
-    if (t == VarType::FLOAT)
+    if (t == VarType::FLOAT || t == VarType::FLOAT_PTR)
     {
         // if (isRegister(src) && isRegister(dest))
         //     o << "    movd " << src << ", " << dest << "\n";
@@ -51,8 +51,8 @@ void IRInstr::gen_asm(std::ostream &o)
     case copy:
         // copy: params[0] = destination, params[1] = source
         if (t == VarType::FLOAT) {
-            move(o, t, params[1], "%xmm0");
-            move(o, t, "%xmm0", params[0]);
+            move(o, t, params[1], "%xmm5");
+            move(o, t, "%xmm5", params[0]);
             break;
         }
 
@@ -121,6 +121,15 @@ void IRInstr::gen_asm(std::ostream &o)
 
     case copyTblx: {
         // copy: params[0] = destination, params[1] = expr, params[2] = position
+        if (t == VarType::FLOAT_PTR) {
+            move(o, t, params[1], "%xmm0");
+            move (o, VarType::INT, params[2], "%eax");                     // Load index into %eax
+            o << "    movslq %eax, %rbx\n";                                // Sign extend to 64-bit
+            o << "    leaq -" << (params[0]) << "(%rbp, %rbx, 4), %rax\n"; // Correct displacement and scaling
+            move (o, t, "%xmm0", "(%rax)"); // Store back
+            break;
+        }
+        
         o << "    movl " << params[2] << ", %eax\n";
         o << "    movslq %eax, %rbx\n";                                // Sign extend to 64-bit
         o << "    leaq -" << (params[0]) << "(%rbp, %rbx, 4), %rax\n"; // Correct displacement and scaling
@@ -130,6 +139,17 @@ void IRInstr::gen_asm(std::ostream &o)
     }
     case addTblx: {
         // add: params[0] = destination, params[1] = expr, params[2] = position
+        if (t == VarType::FLOAT_PTR) {
+            move(o, t, params[1], "%xmm0");
+            move (o, VarType::INT, params[2], "%eax");                      // Load index into %eax
+            o << "    movslq %eax, %rbx\n";                                 // Sign extend to 64-bit
+            o << "    leaq -" << (params[0]) << "(%rbp, %rbx, 4), %rax\n";
+            move (o, t, "(%rax)", "%xmm1");                                 // Load current array value into %xmm1
+            o << "    addss %xmm1, %xmm0\n";
+            move (o, t, "%xmm0", "(%rax)");                                 // Store back
+            break;
+        }
+        
         o << "    movl " << params[2] << ", %eax\n";
         o << "    movslq %eax, %rbx\n"; // Sign extend to 64-bit
         o << "    leaq -" << (params[0]) << "(%rbp, %rbx, 4), %rax\n";
@@ -140,6 +160,17 @@ void IRInstr::gen_asm(std::ostream &o)
     }
     case subTblx: {
         // sub: params[0] = destination, params[1] = expr, params[2] = position
+        if (t == VarType::FLOAT_PTR) {
+            move(o, t, params[1], "%xmm0");
+            move (o, VarType::INT, params[2], "%eax");                      // Load index into %eax
+            o << "    movslq %eax, %rbx\n";                                 // Sign extend to 64-bit
+            o << "    leaq -" << (params[0]) << "(%rbp, %rbx, 4), %rax\n";
+            move (o, t, "(%rax)", "%xmm1");                                 // Load current array value into %xmm1
+            o << "    subss %xmm0, %xmm1\n";
+            move (o, t, "%xmm1", "(%rax)");                                 // Store back
+            break;
+        }
+        
         o << "    movl " << params[2] << ", %eax\n";
         o << "    movslq %eax, %rbx\n"; // Sign extend to 64-bit
         o << "    leaq -" << (params[0]) << "(%rbp, %rbx, 4), %rax\n";
@@ -150,6 +181,17 @@ void IRInstr::gen_asm(std::ostream &o)
     }
     case mulTblx: {
         // mul: params[0] = destination, params[1] = expr, params[2] = position
+        if (t == VarType::FLOAT_PTR) {
+            move(o, t, params[1], "%xmm0");
+            move (o, VarType::INT, params[2], "%eax");                      // Load index into %eax
+            o << "    movslq %eax, %rbx\n";                                 // Sign extend to 64-bit
+            o << "    leaq -" << (params[0]) << "(%rbp, %rbx, 4), %rax\n";
+            move (o, t, "(%rax)", "%xmm1");                                 // Load current array value into %xmm1
+            o << "    mulss %xmm1, %xmm0\n";
+            move (o, t, "%xmm0", "(%rax)");                                 // Store back
+            break;
+        }
+        
         o << "    movl " << params[2] << ", %eax\n";
         o << "    movslq %eax, %rbx\n"; // Sign extend to 64-bit
         o << "    leaq -" << params[0] << "(%rbp, %rbx, 4), %rax\n";
@@ -160,6 +202,17 @@ void IRInstr::gen_asm(std::ostream &o)
     }
     case divTblx: {
         // div: params[0] = destination, params[1] = expr, params[2] = position
+        if (t == VarType::FLOAT_PTR) {
+            move(o, t, params[1], "%xmm0");
+            move (o, VarType::INT, params[2], "%eax");                      // Load index into %eax
+            o << "    movslq %eax, %rbx\n";                                 // Sign extend to 64-bit
+            o << "    leaq -" << (params[0]) << "(%rbp, %rbx, 4), %rax\n";
+            move (o, t, "(%rax)", "%xmm1");                                 // Load current array value into %xmm1
+            o << "    divss %xmm0, %xmm1\n";
+            move (o, t, "%xmm1", "(%rax)");                                 // Store back
+            break;
+        }
+        
         o << "    movl " << params[2] << ", %eax\n";
         o << "    movslq %eax, %rbx\n"; // Sign extend to 64-bit
         o << "    leaq -" << params[0] << "(%rbp, %rbx, 4), %rcx\n";
@@ -182,6 +235,15 @@ void IRInstr::gen_asm(std::ostream &o)
     }
     case getTblx: {
         // copy: params[0] = destination, params[1] = tableaux, params[2] = position
+        if (t == VarType::FLOAT_PTR) {
+            move (o, VarType::INT, params[2], "%eax");                      // Load index into %eax
+            o << "    movslq %eax, %rbx\n"; // Sign extend to 64-bit
+            o << "    leaq -" << (params[1]) << "(%rbp, %rbx, 4), %rax\n";  // Correct displacement and scaling
+            move (o, t, "(%rax)", "%xmm1"); // Store back
+            move (o, t, "%xmm1", params[0]);
+            break;
+        }
+        
         o << "    movl " << params[2] << ", %eax\n";
         o << "    movslq %eax, %rbx\n";                                // Sign extend to 64-bit
         o << "    leaq -" << (params[1]) << "(%rbp, %rbx, 4), %rax\n"; // Correct displacement and scaling
@@ -604,21 +666,31 @@ void GVM::gen_asm(std::ostream &o)
     o << "    .data\n";
 
     // On génère le code assembleur pour les variables globales
-    for (auto var : globalScope->getTable())
+    for (auto const& [name, symbol] : globalScope->getTable())
     {
-        // check if var is temp variable
-        if (SymbolTable::isTempVariable(var.first))
+        // Skip temporary variables if they exist in global scope, they are only used to store constants value
+        if (SymbolTable::isTempVariable(name))
             continue;
-        o << "    .globl " << var.first << "\n";
-        o << var.first << ":\n";
-        if (globalVariableValues.count(var.first) == 0) {
+
+        o << "    .globl " << name << "\n";
+        o << name << ":\n";
+        if (globalVariableValues.count(name) == 0) {
             o << "    .zero 4\n";
         } else {
-            o << "    .long " << globalVariableValues[var.first] << "\n";
+            // Initialized global variable
+            VarType t = symbol.type;
+            std::string value = globalVariableValues[name];
+
+            if (t == VarType::FLOAT) {
+                std::string hexIEEEValue = floatToLong_Ieee754(std::stof(value));
+                std::string lower = hexIEEEValue.substr(0, 8);
+                unsigned long long lowerLong = std::stoull(lower, nullptr, 16);
+                o << "    .long " << lowerLong << "\n";
+            } else if (t == VarType::INT || t == VarType::CHAR) {
+                o << "    .long " << value << "\n";
+            }
         }
     }
-
-    o << "    .text\n";
 }
 
 // ---------------------- Read only data Manager ---------------------- */
@@ -657,6 +729,7 @@ void RoDM::gen_asm(std::ostream &o)
 // -------------------------- Code gen -------------------
 void CodeGenVisitor::gen_asm(ostream &os)
 {
+    os << "// Global variables\n\n";
     gvm->gen_asm(os);
     os << ".text\n";
     os << "\n//================================================ \n\n";
@@ -665,6 +738,7 @@ void CodeGenVisitor::gen_asm(ostream &os)
         cfg->gen_asm(os);
         os << "\n//================================================= \n\n";
     }
+    os << "// Read only data\n\n";
     rodm->gen_asm(os);
 }
 

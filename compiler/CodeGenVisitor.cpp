@@ -147,7 +147,8 @@ antlrcpp::Any CodeGenVisitor::visitSub_declWithType(ifccParser::Sub_declContext 
             }
 
             string typedExpr = this->implicitConversion(exprCst, type);  
-            gvm->setGlobalVariableValue(varName, exprCstSymbol->getCstValue());
+            Symbol *typedExprSymbol = findVariable(typedExpr);
+            gvm->setGlobalVariableValue(varName, typedExprSymbol->getCstValue());
             freeLastTempVariable(1);
         }
     }
@@ -260,18 +261,18 @@ antlrcpp::Any CodeGenVisitor::visitAssignmentStatement(ifccParser::AssignmentSta
         }
         else if (op == "/=")
         {
-            string tempReg = (type == VarType::FLOAT) ? floatRegs[1] : tempRegs[4];
-            currentCfg->current_bb->add_IRInstr(IRInstr::copy, type, {tempReg, typedExprResult});
+            string tempReg = (type == VarType::FLOAT_PTR) ? floatRegs[1] : tempRegs[4];
+            currentCfg->current_bb->add_IRInstr(IRInstr::copy, Symbol::getBaseType(type), {tempReg, typedExprResult});
             currentCfg->current_bb->add_IRInstr(IRInstr::divTblx, type, {varName, tempReg, pos});
         }
         else if (op == "%=")
         {
-            if (type == VarType::FLOAT) {
+            if (type == VarType::FLOAT_PTR) {
                 FeedbackOutputFormat::showFeedbackOutput("error", "mod operator is not supported for float type");
                 exit(1);
             }
 
-            currentCfg->current_bb->add_IRInstr(IRInstr::copy, type, {tempRegs[4], typedExprResult});
+            currentCfg->current_bb->add_IRInstr(IRInstr::copy, Symbol::getBaseType(type), {tempRegs[4], typedExprResult});
             currentCfg->current_bb->add_IRInstr(IRInstr::modTblx, type, {varName, tempRegs[4], pos});
         }
 

@@ -865,7 +865,7 @@ void GVM::gen_asm(std::ostream &o)
             // Initialized global variable
             VarType t = symbol.type;
             std::string value = globalVariableValues[name];
-            if (t == VarType::INT) {
+            if (t == VarType::INT || t == VarType::CHAR) {
                 o << "    .long " << value << "\n"; // Store integer value
             } else if (t == VarType::FLOAT) {
                 float fValue = std::stof(value);
