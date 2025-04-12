@@ -2,24 +2,7 @@
 
 #include <iostream>
 #include <map>
-
-enum VarType {
-    INT,
-    CHAR
-};
-
-enum ScopeType {
-    GLOBAL,
-    FUNCTION_PARAMS,
-    BLOCK
-};
-
-struct Parameters
-{
-    VarType type;
-    int offset;
-    ScopeType scopeType;
-};
+#include "symbole.h"
 
 class SymbolTable
 // classe pour la table des symboles
@@ -29,23 +12,30 @@ class SymbolTable
 {
     public:
         SymbolTable( int initialOffset );
-        int addLocalVariable(std::string name, std::string type); //return offset
-        void addGlobalVariable(std::string name, std::string type);
+
+        Symbol addLocalVariable(std::string name, std::string type, int size = -1); //return offset
+        Symbol addGlobalVariable(std::string name, std::string type);
+        std::string addTempVariable(std::string type); //return name
+        std::string addTempConstVariable(std::string type, int value); //return name
 
 
-        Parameters* findVariable(std::string name); // find all var can see in the scope
-        Parameters* findVariableThisScope(std::string name); //find only var in the scope
+        Symbol* findVariable(std::string name); // find all var can see in the scope
+        Symbol* findVariableThisScope(std::string name); //find only var in the scope
 
         void synchronize(SymbolTable *symbolTable); // synchronise les offsets des variables
-
         bool isGlobalScope();
 
         void setParent(SymbolTable *parent) { this->parent = parent; }
         SymbolTable *getParent() { return parent; }
         int getCurrentDeclOffset() { return currentDeclOffset; }
+        int getNumberVariable() { return table.size(); }
+        std::map<std::string, Symbol> getTable() { return table; }
+
+        void printTable();
+        static bool isTempVariable(std::string name);
 
     private:
-        std::map<std::string, Parameters> table;
+        std::map<std::string, Symbol> table;
         int currentDeclOffset = 0;
 
         SymbolTable *parent = nullptr;

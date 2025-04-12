@@ -273,6 +273,14 @@ def print_fail(str:str):
     
 
 for jobname in jobs:
+
+    #start at test number 45
+
+    #if jobname.split('_')[0].split('-')[1] == '00' or int(jobname.split('_')[0].split('-')[1]) < 54:
+        #continue
+
+
+
     os.chdir(f'{pld_base_dir}/ifcc-test-output')
 
     print('TEST-CASE: '+jobname)
