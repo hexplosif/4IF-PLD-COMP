@@ -1,5 +1,6 @@
 #include "SymbolTable.h"
 #include <iomanip>
+#include "FeedbackStyleOutput.h"
 
 SymbolTable::SymbolTable( int initialOffset ) {
     table = std::map<std::string, Symbol>();
@@ -7,47 +8,69 @@ SymbolTable::SymbolTable( int initialOffset ) {
     this->currentDeclOffset = initialOffset;
 }
 
-Symbol SymbolTable::addLocalVariable(std::string name, std::string type, int size) {
+Symbol SymbolTable::addLocalVariable(std::string name, VarType type, int size) {
     if (findVariableThisScope(name) == nullptr) {
         if (size > 0) {
             currentDeclOffset += size * 4;
         } else {
             currentDeclOffset += 4;
         }
-        Symbol p = { getType(type) , currentDeclOffset, ScopeType::BLOCK };
+        Symbol p = { type, currentDeclOffset, ScopeType::BLOCK };
         table[name] = p;
         return p;
     } else {
-        std::cerr << "error: variable '" << name << "' has already declared\n";
+        FeedbackOutputFormat::showFeedbackOutput("error", "variable '" + name + "' has already declared");
         exit(1);
     }
 }
 
-Symbol SymbolTable::addGlobalVariable(std::string name, std::string type) {
+Symbol SymbolTable::addGlobalVariable(std::string name, VarType type) {
     if (findVariableThisScope(name) == nullptr) {
-        Symbol p = { getType(type) , currentDeclOffset, ScopeType::GLOBAL };
+        Symbol p = { type , currentDeclOffset, ScopeType::GLOBAL };
         table[name] = p; 
         return p;
     } else {
-        std::cerr << "error: variable '" << name << "' has already declared\n";
+        FeedbackOutputFormat::showFeedbackOutput("error", "variable '" + name + "' has already declared");
         exit(1);
     }
 }
 
-std::string SymbolTable::addTempVariable(std::string type) {
-    std::string name = "!tmp" + std::to_string(currentDeclOffset);
-    Symbol p = { getType(type) , currentDeclOffset, ScopeType::BLOCK };
-    table[name] = p;
+std::string SymbolTable::addTempVariable(VarType type, int size) {
+    if (size > 0) {
+        currentDeclOffset += size * 4;
+    } else {
+        currentDeclOffset += 4;
+    }
     currentDeclOffset += 4;
+    std::string name = "!tmp" + std::to_string(currentDeclOffset);
+    Symbol p = { type, currentDeclOffset, ScopeType::BLOCK };
+    table[name] = p;
     return name;
 }
 
-std::string SymbolTable::addTempConstVariable(std::string type, int value) {
-    std::string name = "!tmp" + std::to_string(currentDeclOffset);
-    Symbol p = { getType(type) , currentDeclOffset, ScopeType::BLOCK, value };
-    table[name] = p;
+std::string SymbolTable::addTempConstVariable(VarType type, std::string value) {
     currentDeclOffset += 4;
+    std::string name = "!tmp" + std::to_string(currentDeclOffset);
+    Symbol p = { type , currentDeclOffset, ScopeType::BLOCK, value };
+    table[name] = p;
     return name;
+}
+
+void SymbolTable::freeLastTempVariable() {
+    if (currentDeclOffset > 0) {
+        std::string name = "!tmp" + std::to_string(currentDeclOffset);
+        currentDeclOffset -= 4;
+
+        if (table.find(name) == table.end()) {
+            std::cerr << "error: temp variable '" << name << "' not found\n";
+            exit(1);
+        }
+        table.erase(name);
+    }
+    else {
+        std::cerr << "error: no temp variable to free\n";
+        exit(1);
+    }
 }
 
 Symbol* SymbolTable::findVariable(std::string name) {
@@ -76,17 +99,10 @@ bool SymbolTable::isGlobalScope() {
     return parent == nullptr;
 }
 
-VarType SymbolTable::getType( std::string strType ) {
-    if (strType == "int") return VarType::INT;
-    if (strType == "char") return VarType::CHAR;
-    std::cerr << "error: unknown type " << strType << std::endl;
-    exit(1);
-}
-
 void SymbolTable::printTable() {
-    std::cout << "================== Symbol Table ==================" << std::endl;
-    std::cout << "| Name       | Type   | Scope           | Offset |" << std::endl;
-    std::cout << "------------------------------------------------" << std::endl;
+    std::cout << "======================== Symbol Table ========================" << std::endl;
+    std::cout << "| Name       | Type   | Scope           | Offset | Is used?  |" << std::endl;
+    std::cout << "--------------------------------------------------------------" << std::endl;
     
     for (const auto& entry : table) {
         std::string varName = entry.first;
@@ -105,12 +121,24 @@ void SymbolTable::printTable() {
                   << " | " << std::setw(6) << std::left << typeStr
                   << " | " << std::setw(15) << std::left << scopeStr
                   << " | " << std::setw(6) << std::left << symbol.offset 
+                  << " | " << std::setw(9) << std:: left << symbol.isUsed()
                   << " |" << std::endl;
     }
     
-    std::cout << "================================================" << std::endl;
+    std::cout << "==============================================================" << std::endl;
 }
 
 bool SymbolTable::isTempVariable(std::string name) {
     return name.find("!tmp") != std::string::npos;
+}
+
+void SymbolTable::checkUnusedVariables() {
+    for (const auto& entry : table) {
+        std::string varName = entry.first;
+        Symbol symbol = entry.second;
+        
+        if (!isTempVariable(varName) && !symbol.isUsed()) {
+            FeedbackOutputFormat::showFeedbackOutput("warning", "variable '" + varName + "' is declared but not used");
+        }
+    }
 }

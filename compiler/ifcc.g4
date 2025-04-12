@@ -2,9 +2,20 @@ grammar ifcc;
 
 axiom : prog EOF ;
 
-prog : (decl_stmt)* 'int' 'main' '(' ')' block ;
+prog : (decl_stmt | function_definition)*;
+
+// Function
+function_definition
+    : retType VAR '(' parameterList? ')' block
+    ;
+
+retType : type | 'void' ;
+parameterList : parameter (',' parameter)* ;
+parameter : type VAR ;
 
 block : '{' stmt* '}' ;
+
+// Statements
 
 stmt 
     : decl_stmt              # DeclarationStatement
@@ -18,12 +29,14 @@ stmt
 
 
 decl_stmt : type sub_decl (',' sub_decl)* ';' ;         // Déclaration avec ou sans affectation
-sub_decl : VAR ('=' expr)? | VAR '[' CONST ']';         // Sub-règle pour les déclarations
+sub_decl : (VAR ('=' expr)?) | (VAR '[' CONST ']' ('=' ('{' expr(',' expr)* '}' | CONST_STRING) )?);         // Sub-règle pour les déclarations
 assign_stmt : (VAR | VAR '[' expr ']') op_assign expr ';';                   // Affectation
 op_assign: '=' | '+=' | '-=' | '*=' | '/=' | '%=';
-return_stmt : 'return' expr ';' ;                       // On retourne une expression
+return_stmt : 'return' (expr)? ';' ;                       // On retourne une expression
 if_stmt : 'if' '(' expr ')' stmt ('else' stmt)? ;       // If statement
 while_stmt : 'while' '(' expr ')' stmt ;                // While statement
+
+// Expressions
 
 expr
     : VAR '++'							            # PostIncrementExpression
@@ -39,19 +52,24 @@ expr
     | VAR                                           # VariableExpression
     | VAR '[' expr ']'                              # ArrayAccessExpression
     | CONST                                         # ConstantExpression
+    | CONST_DOUBLE                                  # ConstantDoubleExpression
     | CONST_CHAR                                    # ConstantCharExpression
+    | CONST_STRING                                  # ConstantStringExpression
     | VAR '++'                                      # PostIncrementExpression
     | VAR '--'                                      # PostDecrementExpression
     ;
 
-type : 'int' | 'char' ;
+type : 'int' | 'char' | 'float' ;
 
 VAR   : [a-zA-Z_][a-zA-Z_0-9]* ;  // Identifiants pour les variables
 CONST : [0-9]+ ;                 // Constantes entières
-CONST_CHAR : '\''[ -~]'\'' ;
+CONST_DOUBLE : [0-9]+ '.' [0-9]+ ('f')?; // Constantes flottantes
+CONST_CHAR : '\'' [ -~] '\'' ;
+CONST_STRING : '"' ([ -~])*? '"' ;
 
 OPM: '*' | '/' | '%' ; // Opérateurs multiplicatifs 
 
 COMMENT : '/*' .*? '*/' -> skip ;
+COMMENT_LINE : '//' .*? '\n' -> skip ;
 DIRECTIVE : '#' .*? '\n' -> skip ;
 WS    : [ \t\r\n] -> channel(HIDDEN);

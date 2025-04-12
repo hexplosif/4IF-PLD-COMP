@@ -1,5 +1,8 @@
+#define EPILOGUE_LABEL 
+
 #ifndef IR_H
 #define IR_H
+
 
 #include <vector>
 #include <string>
@@ -7,13 +10,13 @@
 #include <iostream>
 #include <initializer_list>
 #include <map>       // Ajout pour std::map
+#include "DefFunction.h"
 #include "symbole.h"
 #include "SymbolTable.h"  // Inclure notre table des symboles
 
 class BasicBlock;
 class CFG;
-class DefFonction;
-
+class RoDM;
 
 //! The class for one 3-address instruction
 class IRInstr {
@@ -51,6 +54,8 @@ public:
         not_op,
         log_and,
         log_or,
+        intToFloat,
+        floatToInt,
         call,
         jmp
     } Operation;
@@ -103,9 +108,10 @@ public:
 
     // x86 code generation: could be encapsulated in a processor class in a retargetable compiler
     void gen_asm(std::ostream& o);
-    std::string IR_reg_to_asm(std::string& reg); /**< helper method: inputs a IR reg or input variable, returns e.g. "-24(%rbp)" for the proper value of 24 */
+    std::string IR_reg_to_asm(std::string& reg, bool ignoreCst = false); /**< helper method: inputs a IR reg or input variable, returns e.g. "-24(%rbp)" for the proper value of 24 */
     void gen_asm_prologue(std::ostream& o);
     void gen_asm_epilogue(std::ostream& o);
+    std::string get_epilogue_label();  /**< returns the label of the epilogue */
 
     // symbol table methods: désormais déléguées à SymbolTable
     int get_var_index(std::string name);
@@ -116,12 +122,15 @@ public:
 
     // On remplace ces membres par notre instance de SymbolTable
     SymbolTable* currentScope = nullptr; /**< the symbol table of the current scope */
+    int getStackSize();
+
+    static bool isRegConstant(std::string& reg);
+
+    // Read-Only Data Manager
+    RoDM* rodm = nullptr; /**< the read-only data manager */
 
 protected:
-
-    int nextFreeSymbolIndex; /**< to allocate new symbols in the symbol table */
-    int nextBBnumber; /**< just for naming */
-
+    static int nextBBnumber; /**< just for naming */
     std::vector<BasicBlock*> bbs; /**< all the basic blocks of this CFG*/
 };
 
@@ -132,15 +141,35 @@ class GVM { // Global Variable Manager
         GVM();
         void gen_asm(std::ostream& o);
 
-        void addGlobalVariable(std::string name, std::string type);
-        void setGlobalVariableValue(std::string name, int value);
-        std::string addTempConstVariable(std::string type, int value);
+        void addGlobalVariable(std::string name, VarType type);
+        void setGlobalVariableValue(std::string name, std::string value);
+        std::string addTempConstVariable(VarType type, std::string value);
 
         SymbolTable* getGlobalScope() { return globalScope; }
 
     protected:
         SymbolTable* globalScope; /**< the symbol table of the global scope */
-        std::map<std::string, int> globalVariableValues; /**< the values of the global variables */
+        std::map<std::string, std::string> globalVariableValues; /**< the values of the global variables */
 };
 
-#endif
+//** The class to manage read-only data */
+class RoDM { //Read Only Data Manager
+    public:
+        RoDM();
+        void gen_asm(std::ostream& o);
+        std::string putFloatIfNotExists(float value); /**< returns the label of the double data */
+        std::string getLabelDataForUnaryOp(); /**< returns the label of the double data */
+    
+    private:
+        bool needDataForUnaryOp = false; /**< if true, the data used in unary op*/
+        std::string labelDataForUnaryOp; /**< the label of the data used in unary op */
+
+        std::map<std::string, float> floatData; /**< the float values of the read-only data */
+        int labelCounter; /**< the label counter for the read-only data */
+        std::string getNewFloatLabel(); /**< returns the label of the double data */
+};
+
+std::string floatToLong_Ieee754(float value); /**< returns the IEEE 754 32bits version of double */
+
+
+#endif // IR_H

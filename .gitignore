@@ -17,5 +17,6 @@ ifcc-test-output/*
 .antlr/
 .clangd
 .clang-format
+.DS_Store/
 
 son_note.md
