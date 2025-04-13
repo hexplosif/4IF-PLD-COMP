@@ -2,6 +2,7 @@
 #include "SymbolTable.h"
 #include "FeedbackStyleOutput.h"
 #include <cstdlib>
+#include <cstdint>
 #include <iostream>
 #include <sstream>
 using namespace std;
