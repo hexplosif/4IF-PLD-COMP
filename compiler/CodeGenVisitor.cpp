@@ -229,12 +229,13 @@ antlrcpp::Any CodeGenVisitor::visitAssignmentStatement(ifccParser::AssignmentSta
 
     string varName = assign->VAR()->getText();
     Symbol *var = findVariable(varName);
-    VarType type = var->type;
     if (var == nullptr) {
+
         FeedbackOutputFormat::showFeedbackOutput("error", "variable '" + varName + "' not declared");
         exit(1);
     }
 
+    VarType type = var->type;
     string op = assign->op_assign()->getText();
     size_t equalsPos = ctx->getText().find('=');
     if (equalsPos != std::string::npos && ctx->getText().substr(0, equalsPos).find('[') != std::string::npos)
@@ -690,6 +691,11 @@ antlrcpp::Any CodeGenVisitor::visitUnaryExpression(ifccParser::UnaryExpressionCo
     // op=('-'|'!') expr
     string expr = any_cast<string>(this->visit(ctx->expr()));
     Symbol *exprSymbol = findVariable(expr);
+
+    if (exprSymbol == nullptr) {
+        FeedbackOutputFormat::showFeedbackOutput("error", "variable '" + expr + "' not declared");
+        exit(1);
+    }
 
     VarType type = exprSymbol->type;
     string labelDataForFloatUnary = "";
