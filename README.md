@@ -94,6 +94,15 @@ Les tâches ont été définies et réparties entre les membres de l'équipe, en
 
 ## Compilation et Exécution
 
+Première étape :
+Etablir votre propre `compiler/config.mk`. Voici un exemple :
+```sh
+ANTLRJAR=/home/$(USER)/antlr4-install/antlr-4.13.2-complete.jar
+ANTLRINC=/home/$(USER)/antlr4-install/include/antlr4-runtime/
+ANTLRLIB=/home/$(USER)/antlr4-install/lib/libantlr4-runtime.a
+ANTLR=java -jar $(ANTLRJAR)
+```
+
 ### Compilation du Projet
 Utilisation de `make` pour compiler le projet :
 ```sh
